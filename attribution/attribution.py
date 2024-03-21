@@ -67,6 +67,11 @@ class Attributor:
         self.log(token_ids.shape, Verbosity.INFO)
         return attr_scores, token_ids
 
+    def print_attributions(self, word_list, attr_scores: np.array, token_ids: np.array, generation_length: int):
+        max_abs_attr_val = attr_scores.abs().max().item()
+        table_printer = RichTablePrinter(max_abs_attr_val)
+        table_printer.print_attribution_table(word_list, attr_scores, token_ids, generation_length)
+
 
 if __name__ == "__main__":
     model_name = "distilgpt2"
@@ -76,3 +81,10 @@ if __name__ == "__main__":
 
     attributor = Attributor(logger=ConsoleLogger())
     attr_scores, token_ids = attributor.get_attributions(model, tokenizer, "the five continents are asia, europe, afri", 7)
+
+    attributor.print_attributions(
+        word_list=[tokenizer.decode(token_id) for token_id in token_ids],
+        attr_scores=attr_scores,
+        token_ids=token_ids,
+        generation_length=7,
+    )
