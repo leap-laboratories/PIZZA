@@ -4,8 +4,9 @@ from typing import Tuple
 import numpy as np
 import torch
 import transformers
-from loggers import ConsoleLogger, Logger, Verbosity
-from visualization import RichTablePrinter
+
+from attribution.loggers import Logger, Verbosity
+from attribution.visualization import RichTablePrinter
 
 
 class Attributor:
@@ -22,12 +23,32 @@ class Attributor:
         tokenizer: transformers.PreTrainedTokenizerBase,
         input_string: str,
         generation_length: int,
-    ):
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Computes the attributions of each token in the input string to the generated tokens.
+
+        Args:
+            model (transformers.models.gpt2.GPT2Model): The GPT-2 model to use for token generation.
+            tokenizer (transformers.PreTrainedTokenizerBase): The tokenizer to use for tokenizing
+                the input string.
+            input_string (str): The input string to compute attributions for.
+            generation_length (int): The number of tokens to generate.
+
+        Raises:
+            ValueError: If the model is not an instance of torch.nn.Module, the tokenizer is not an
+                instance of transformers.PreTrainedTokenizerBase, the input_string is not a string,
+                the generation_length is not an integer, the generation_length is not a positive
+                integer, the model does not have a 'transformer.wte.weight' attribute, or the
+                model is in training mode.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: A tuple containing the attribution scores and
+                the token ids.
+        """
         if not isinstance(model, torch.nn.Module):
             raise ValueError(
                 "Model must be an instance of a class that inherits from torch.nn.Module"
             )
-
         if not isinstance(tokenizer, transformers.PreTrainedTokenizerBase):
             raise ValueError(
                 "Tokenizer must be an instance of transformers.PreTrainedTokenizerBase"
@@ -35,7 +56,15 @@ class Attributor:
         if not isinstance(input_string, str):
             raise ValueError("Input string must be a string")
         if not isinstance(generation_length, int):
-            raise ValueError("Generation length must be an integer")
+            raise ValueError("Generation length must be an integer.")
+        if generation_length <= 0:
+            raise ValueError("Generation length must be a positive integer.")
+        if (
+            not hasattr(model, "transformer")
+            or not hasattr(model.transformer, "wte")
+            or not hasattr(model.transformer.wte, "weight")
+        ):
+            raise ValueError("Model must have a 'transformer.wte.weight' attribute")
 
         if model.training:
             raise ValueError("Model should be in evaluation mode, not training mode")
@@ -67,8 +96,6 @@ class Attributor:
 
             self._cleanup()
 
-        self.log(attr_scores.shape, Verbosity.INFO)
-        self.log(token_ids.shape, Verbosity.INFO)
         return attr_scores, token_ids
 
     def _get_input_embeddings(
@@ -100,7 +127,8 @@ class Attributor:
         next_token_id: torch.Tensor,
         input_embeddings: torch.Tensor,
     ) -> torch.Tensor:
-        torch.softmax(output.logits, dim=1)[-1, next_token_id].backward()
+        softmax_output = torch.softmax(output.logits, dim=1)
+        softmax_output[-1, next_token_id].backward()
         return input_embeddings.grad
 
     def _get_attr_scores_next_token(
