@@ -27,7 +27,7 @@ class RichTablePrinter:
         token_list: List[str],
         attr_scores: np.array,
         token_ids: np.array,
-        generation_length: int
+        generation_length: int,
     ):
         input_length = token_ids.shape[0] - generation_length
         table = Table(show_header=True, header_style="bold", box=box.SIMPLE)
@@ -39,12 +39,14 @@ class RichTablePrinter:
                 header_text.append(token)
             else:
                 header_text.append(token, style="blue")
+        self.console.print("\n")
         self.console.print(header_text)
 
         # Transpose the attr_scores for table representation
         attr_scores = attr_scores.T
 
         # Add columns (axis labels for y-axis)
+        table.add_column("")
         for i in range(input_length, len(token_list)):
             table.add_column(token_list[i], justify="right")
 
