@@ -46,3 +46,5 @@ attr_scores, token_ids = attributor.get_attributions(
     model, tokenizer, "the five continents are asia, europe, afri", 7
 )
 ```
+
+You can run this script with `example.py`.
