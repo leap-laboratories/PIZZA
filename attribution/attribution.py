@@ -42,26 +42,7 @@ class Attributor:
             Tuple[torch.Tensor, torch.Tensor]: A tuple containing the attribution scores and
                 the token ids.
         """
-        if not isinstance(model, torch.nn.Module):
-            raise ValueError(
-                "Model must be an instance of a class that inherits from torch.nn.Module"
-            )
-        if not isinstance(tokenizer, transformers.PreTrainedTokenizerBase):
-            raise ValueError(
-                "Tokenizer must be an instance of transformers.PreTrainedTokenizerBase"
-            )
-        if not isinstance(input_string, str):
-            raise ValueError("Input string must be a string")
-        if not isinstance(generation_length, int):
-            raise ValueError("Generation length must be an integer.")
-        if generation_length <= 0:
-            raise ValueError("Generation length must be a positive integer.")
-        if (
-            not hasattr(model, "transformer")
-            or not hasattr(model.transformer, "wte")
-            or not hasattr(model.transformer.wte, "weight")
-        ):
-            raise ValueError("Model must have a 'transformer.wte.weight' attribute")
+        self._validate_inputs(model, tokenizer, input_string, generation_length)
 
         if model.training:
             raise ValueError("Model should be in evaluation mode, not training mode")
@@ -144,6 +125,37 @@ class Attributor:
     def _cleanup(self) -> None:
         torch.cuda.empty_cache()
         gc.collect()
+
+    def _validate_inputs(
+        self,
+        model: transformers.GPT2LMHeadModel,
+        tokenizer: transformers.PreTrainedTokenizerBase,
+        input_string: str,
+        generation_length: int,
+    ):
+        if not isinstance(model, torch.nn.Module):
+            raise ValueError(
+                "Model must be an instance of a class that inherits from torch.nn.Module"
+            )
+        if not isinstance(tokenizer, transformers.PreTrainedTokenizerBase):
+            raise ValueError(
+                "Tokenizer must be an instance of transformers.PreTrainedTokenizerBase"
+            )
+        if not isinstance(input_string, str):
+            raise ValueError("Input string must be a string")
+        if not isinstance(generation_length, int):
+            raise ValueError("Generation length must be an integer.")
+        if generation_length <= 0:
+            raise ValueError("Generation length must be a positive integer.")
+        if (
+            not hasattr(model, "transformer")
+            or not hasattr(model.transformer, "wte")
+            or not hasattr(model.transformer.wte, "weight")
+        ):
+            raise ValueError("Model must have a 'transformer.wte.weight' attribute")
+
+        if model.training:
+            raise ValueError("Model should be in evaluation mode, not training mode")
 
     def print_attributions(
         self,
