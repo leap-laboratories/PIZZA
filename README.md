@@ -1,7 +1,7 @@
 # LLM Attribution Library
 The LLM Attribution Library is a Python package designed to compute the attributions of each token in an input string to the generated tokens in a language model. This is particularly useful for understanding the influence of specific input tokens on the output of a language model.
 
-![Attribution Table](imgs/table.png)
+![Attribution Table](docs/assets/table.png)
 
 
 ## Technical Overview
