@@ -69,6 +69,28 @@ class Attributor:
 
         return attr_scores, token_ids
 
+    def print_attributions(
+        self,
+        word_list,
+        attr_scores: torch.Tensor,
+        token_ids: torch.Tensor,
+        generation_length: int,
+    ):
+        """
+        This function prints the attribution scores of each token in a formatted table.
+
+        Parameters:
+            word_list (List[str]): The list of words for which attributions are computed.
+            attr_scores (torch.Tensor): The tensor containing the attribution scores for each token.
+            token_ids (torch.Tensor): The tensor containing the ids of the tokens.
+            generation_length (int): The number of tokens to generate.
+        """
+        max_abs_attr_val = attr_scores.abs().max().item()
+        table_printer = RichTablePrinter(max_abs_attr_val)
+        table_printer.print_attribution_table(
+            word_list, attr_scores, token_ids, generation_length
+        )
+
     def _get_input_embeddings(
         self, embeddings: torch.Tensor, token_ids: torch.Tensor
     ) -> torch.Tensor:
@@ -149,16 +171,3 @@ class Attributor:
 
         if model.training:
             raise ValueError("Model should be in evaluation mode, not training mode")
-
-    def print_attributions(
-        self,
-        word_list,
-        attr_scores: torch.Tensor,
-        token_ids: torch.Tensor,
-        generation_length: int,
-    ):
-        max_abs_attr_val = attr_scores.abs().max().item()
-        table_printer = RichTablePrinter(max_abs_attr_val)
-        table_printer.print_attribution_table(
-            word_list, attr_scores, token_ids, generation_length
-        )
