@@ -1,0 +1,11 @@
+name: Main
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  unit:
+    name: Unit Tests
+    uses: ./.github/workflows/unit.yml
