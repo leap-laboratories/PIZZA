@@ -1,16 +1,13 @@
 import gc
-from typing import Tuple
-
-import numpy as np
+from typing import Optional, Tuple
 import torch
 import transformers
-
 from attribution.loggers import Logger, Verbosity
 from attribution.visualization import RichTablePrinter
 
 
 class Attributor:
-    def __init__(self, logger: Logger = None):
+    def __init__(self, logger: Optional[Logger] = None):
         self.logger = logger
 
     def log(self, message: str, verbosity: Verbosity):
@@ -19,7 +16,7 @@ class Attributor:
 
     def get_attributions(
         self,
-        model: transformers.models.gpt2.GPT2Model,
+        model: transformers.GPT2LMHeadModel,
         tokenizer: transformers.PreTrainedTokenizerBase,
         input_string: str,
         generation_length: int,
@@ -106,10 +103,10 @@ class Attributor:
 
     def _generate_tokens(
         self,
-        model: transformers.models.gpt2.GPT2Model,
+        model: transformers.GPT2LMHeadModel,
         token_ids: torch.Tensor,
         tokenizer: transformers.PreTrainedTokenizerBase,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ):
         attention_mask = torch.ones(token_ids.shape).unsqueeze(0).to(model.device)
         with torch.no_grad():
             gen_tokens = model.generate(
@@ -123,12 +120,16 @@ class Attributor:
 
     def _get_gradients(
         self,
-        output: transformers.modeling_outputs.BaseModelOutputWithPastAndCrossAttentions,
+        output,
         next_token_id: torch.Tensor,
         input_embeddings: torch.Tensor,
     ) -> torch.Tensor:
         softmax_output = torch.softmax(output.logits, dim=1)
         softmax_output[-1, next_token_id].backward()
+
+        if input_embeddings.grad is None:
+            raise ValueError("Input embeddings gradient is None.")
+
         return input_embeddings.grad
 
     def _get_attr_scores_next_token(
@@ -147,8 +148,8 @@ class Attributor:
     def print_attributions(
         self,
         word_list,
-        attr_scores: np.array,
-        token_ids: np.array,
+        attr_scores: torch.Tensor,
+        token_ids: torch.Tensor,
         generation_length: int,
     ):
         max_abs_attr_val = attr_scores.abs().max().item()

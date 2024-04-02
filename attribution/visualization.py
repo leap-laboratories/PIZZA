@@ -1,10 +1,10 @@
 from typing import List
 
-import numpy as np
 from rich import box
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
+import torch
 
 
 class RichTablePrinter:
@@ -25,8 +25,8 @@ class RichTablePrinter:
     def print_attribution_table(
         self,
         token_list: List[str],
-        attr_scores: np.array,
-        token_ids: np.array,
+        attr_scores: torch.Tensor,
+        token_ids: torch.Tensor,
         generation_length: int,
     ):
         input_length = token_ids.shape[0] - generation_length
