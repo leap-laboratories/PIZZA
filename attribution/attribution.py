@@ -1,19 +1,12 @@
 import gc
-from typing import Optional, Tuple
+import logging
+from typing import Tuple
 import torch
 import transformers
-from attribution.loggers import Logger, Verbosity
 from attribution.visualization import RichTablePrinter
 
 
 class Attributor:
-    def __init__(self, logger: Optional[Logger] = None):
-        self.logger = logger
-
-    def log(self, message: str, verbosity: Verbosity):
-        if self.logger:
-            self.logger.log(message=message, verbosity=verbosity)
-
     def get_attributions(
         self,
         model: transformers.GPT2LMHeadModel,
@@ -62,7 +55,7 @@ class Attributor:
             gen_tokens, next_token_id = self._generate_tokens(
                 model, token_ids, tokenizer
             )
-            self.log(f"{tokenizer.decode(gen_tokens[0])}", Verbosity.INFO)
+            logging.info(f"{tokenizer.decode(gen_tokens[0])}")
             grad = self._get_gradients(output, next_token_id, input_embeddings)
 
             attr_scores_next_token = self._get_attr_scores_next_token(
