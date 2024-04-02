@@ -9,21 +9,21 @@ The library uses gradient-based attribution to quantify the influence of input t
 
 ## Installation
 1. First, clone the repository:
-```
+```bash
 git clone git@github.com:leap-laboratories/llm-attribution.git
 ```
 2. Navigate into the cloned directory:
-```
+```bash
 cd llm-attribution
 ```
 3. Create a virtual environment and activate it:
-```
+```bash
 uv venv
 source .venv/bin/activate
 ```
 4. Install the requirements:
-```
-uv pip sync requirements.txt
+```bash
+uv pip install -r requirements.txt
 ```
 
 Now, you should be able to import and use the library in your Python scripts.
@@ -32,7 +32,7 @@ Now, you should be able to import and use the library in your Python scripts.
 
 ## Usage
 Here is a basic example of how to use the library:
-```
+```python
 import transformers
 from attribution.attribution import Attributor
 
@@ -48,3 +48,10 @@ attr_scores, token_ids = attributor.get_attributions(
 ```
 
 You can run this script with `example.py`.
+
+## Development
+
+To contribute to the library, you will need to install the development requirements:
+```bash
+uv pip install -r requirements-dev.txt
+```
