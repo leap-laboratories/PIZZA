@@ -1,11 +1,15 @@
 import transformers
-
 from attribution.attribution import Attributor
 
 model_name = "distilgpt2"
 tokenizer = transformers.GPT2Tokenizer.from_pretrained(model_name, padding_side="left")
 tokenizer.pad_token = tokenizer.eos_token
-model = transformers.GPT2LMHeadModel.from_pretrained(model_name).eval()
+model = transformers.GPT2LMHeadModel.from_pretrained(model_name)
+
+if not isinstance(model, transformers.GPT2LMHeadModel):
+    raise ValueError("model not found")
+
+model.eval()
 
 attributor = Attributor()
 attr_scores, token_ids = attributor.get_attributions(

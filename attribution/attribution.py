@@ -1,12 +1,28 @@
 import gc
 import logging
-from typing import Tuple
+from typing import Optional, Tuple
 import torch
 import transformers
 from attribution.visualization import RichTablePrinter
 
 
 class Attributor:
+    device: str
+
+    def __init__(self, device: Optional[str] = None, log_level: int = logging.WARNING):
+        logging.basicConfig(level=log_level)
+
+        if device is None:
+            if torch.backends.mps.is_available():
+                device = "mps"
+            elif torch.cuda.is_available():
+                device = "cuda"
+            else:
+                device = "cpu"
+
+        logging.info(f"Using device: {device}")
+        self.device = device
+
     def get_attributions(
         self,
         model: transformers.GPT2LMHeadModel,
@@ -41,7 +57,7 @@ class Attributor:
             raise ValueError("Model should be in evaluation mode, not training mode")
 
         token_ids: torch.Tensor = torch.tensor(tokenizer(input_string).input_ids).to(
-            model.device
+            self.device
         )
         embeddings: torch.Tensor = model.transformer.wte.weight.detach()
         input_length: int = token_ids.shape[0]
@@ -103,7 +119,7 @@ class Attributor:
         token_ids: torch.Tensor,
         tokenizer: transformers.PreTrainedTokenizerBase,
     ):
-        attention_mask = torch.ones(token_ids.shape).unsqueeze(0).to(model.device)
+        attention_mask = torch.ones(token_ids.shape).unsqueeze(0).to(self.device)
         with torch.no_grad():
             gen_tokens = model.generate(
                 token_ids.unsqueeze(0),
