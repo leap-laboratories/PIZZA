@@ -80,8 +80,6 @@ class Attributor:
             attr_scores[it] = attr_scores_next_token
             token_ids = torch.cat((token_ids, next_token_id.view(-1)), dim=0)
 
-            self._cleanup()
-
         return attr_scores, token_ids
 
     def print_attributions(
@@ -105,6 +103,20 @@ class Attributor:
         table_printer.print_attribution_table(
             word_list, attr_scores, token_ids, generation_length
         )
+
+    def cleanup(self) -> None:
+        """
+        This function is used to free up the memory resources. It clears the GPU cache and triggers garbage collection.
+
+        Returns:
+        None
+        """
+        if hasattr(torch, self.device) and hasattr(
+            getattr(torch, self.device), "empty_cache"
+        ):
+            logging.info(f"Clearing {self.device} cache")
+            getattr(torch, self.device).empty_cache()
+        gc.collect()
 
     def _get_input_embeddings(
         self, embeddings: torch.Tensor, token_ids: torch.Tensor
@@ -151,10 +163,6 @@ class Attributor:
             presence_grad = (grad[i]).norm(p=1)
             attr_scores_next_token[i] = presence_grad
         return attr_scores_next_token
-
-    def _cleanup(self) -> None:
-        torch.cuda.empty_cache()
-        gc.collect()
 
     def _validate_inputs(
         self,

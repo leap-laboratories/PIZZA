@@ -101,6 +101,14 @@ attributor = Attributor(
 )
 ```
 
+### Cleaning Up
+
+A convenience method is provided to clean up memory used by Python and Torch. This can be useful when running the library in a cloud notebook environment:
+
+```python
+attributor.cleanup()
+```
+
 ## Development
 
 To contribute to the library, you will need to install the development requirements:
