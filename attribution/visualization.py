@@ -1,10 +1,10 @@
 from typing import List
 
+import torch
 from rich import box
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
-import torch
 
 
 class RichTablePrinter:
