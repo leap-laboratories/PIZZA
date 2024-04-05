@@ -5,13 +5,11 @@ from attribution.attribution import Attributor
 
 
 @pytest.fixture
-def attributor():
-    return Attributor()
-
-
-@pytest.fixture
 def model():
-    model = transformers.GPT2LMHeadModel.from_pretrained("distilgpt2").eval()
+    model = transformers.GPT2LMHeadModel.from_pretrained("distilgpt2")
+    if not isinstance(model, transformers.GPT2LMHeadModel):
+        raise ValueError("model not found")
+    model.eval()
     return model
 
 
@@ -22,6 +20,11 @@ def tokenizer():
     )
     tokenizer.pad_token = tokenizer.eos_token
     return tokenizer
+
+
+@pytest.fixture
+def attributor(model, tokenizer):
+    return Attributor(model=model, tokenizer=tokenizer)
 
 
 def test_get_input_embeddings(attributor, model, tokenizer):

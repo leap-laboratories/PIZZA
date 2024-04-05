@@ -55,9 +55,10 @@ if not isinstance(model, transformers.GPT2LMHeadModel):
 
 model.eval()
 
-attributor = Attributor()
+attributor = Attributor(model=model, tokenizer=tokenizer)
 attr_scores, token_ids = attributor.get_attributions(
-    model, tokenizer, "the five continents are asia, europe, afri", 7
+    input_string="the five continents are asia, europe, afri",
+    generation_length=7,
 )
 
 attributor.print_attributions(
@@ -66,7 +67,6 @@ attributor.print_attributions(
     token_ids=token_ids,
     generation_length=7,
 )
-
 ```
 
 You can run this script with `example.py`.
@@ -76,10 +76,16 @@ You can run this script with `example.py`.
 To run the attribution process on a device of your choice, pass the device identifier into the `Attributor` class constructor:
 
 ```python
-attributor = Attributor(device="cuda:0")
+attributor = Attributor(
+    model=model,
+    tokenizer=tokenizer,
+    device="cuda:0"
+)
 ```
 
 The device identifider must match the device used on the first embeddings layer of your model.
+
+If no device is specified, the model device will be used by default.
 
 ### Logging
 
@@ -88,7 +94,11 @@ The library uses the `logging` module to log messages. You can configure the log
 ```python
 import logging
 
-attributor = Attributor(log_level=logging.INFO)
+attributor = Attributor(
+    model=model,
+    tokenizer=tokenizer,
+    log_level=logging.INFO
+)
 ```
 
 ## Development

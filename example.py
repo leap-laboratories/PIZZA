@@ -11,9 +11,10 @@ if not isinstance(model, transformers.GPT2LMHeadModel):
 
 model.eval()
 
-attributor = Attributor()
+attributor = Attributor(model=model, tokenizer=tokenizer)
 attr_scores, token_ids = attributor.get_attributions(
-    model, tokenizer, "the five continents are asia, europe, afri", 7
+    input_string="the five continents are asia, europe, afri",
+    generation_length=7,
 )
 
 attributor.print_attributions(
