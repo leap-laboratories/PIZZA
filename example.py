@@ -9,9 +9,10 @@ model = transformers.GPT2LMHeadModel.from_pretrained(model_name)
 if not isinstance(model, transformers.GPT2LMHeadModel):
     raise ValueError("model not found")
 
+embeddings = model.transformer.wte.weight.detach()
 model.eval()
 
-attributor = Attributor(model=model, tokenizer=tokenizer)
+attributor = Attributor(model=model, embeddings=embeddings, tokenizer=tokenizer)
 attr_scores, token_ids = attributor.get_attributions(
     input_string="the five continents are asia, europe, afri",
     generation_length=7,

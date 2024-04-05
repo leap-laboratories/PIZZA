@@ -14,6 +14,11 @@ def model():
 
 
 @pytest.fixture
+def embeddings(model):
+    return model.transformer.wte.weight.detach()
+
+
+@pytest.fixture
 def tokenizer():
     tokenizer = transformers.GPT2Tokenizer.from_pretrained(
         "distilgpt2", padding_side="left"
@@ -23,8 +28,8 @@ def tokenizer():
 
 
 @pytest.fixture
-def attributor(model, tokenizer):
-    return Attributor(model=model, tokenizer=tokenizer)
+def attributor(model, embeddings, tokenizer):
+    return Attributor(model=model, embeddings=embeddings, tokenizer=tokenizer)
 
 
 def test_get_input_embeddings(attributor, model, tokenizer):

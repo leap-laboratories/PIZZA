@@ -1,32 +1,39 @@
 import gc
 import logging
-from typing import Optional, Tuple
+from typing import Optional, Tuple, cast
 import torch
+from torch import nn
 import transformers
 from attribution.visualization import RichTablePrinter
 
 
 class Attributor:
     device: str
-    model: transformers.GPT2LMHeadModel
+    model: nn.Module
     tokenizer: transformers.PreTrainedTokenizerBase
+    embeddings: torch.Tensor
 
     def __init__(
         self,
-        model: transformers.GPT2LMHeadModel,
+        model: nn.Module,
         tokenizer: transformers.PreTrainedTokenizerBase,
+        embeddings: torch.Tensor,
         device: Optional[str] = None,
         log_level: int = logging.WARNING,
     ):
         logging.basicConfig(level=log_level)
 
         if device is None:
-            device = model.device.type
+            if model.device:
+                device = cast(str, model.device.type)
+            else:
+                device = "cpu"
 
         logging.info(f"Using device: {device}")
         self.device = device
 
         self.model = model
+        self.embeddings = embeddings
         self.tokenizer = tokenizer
 
     def get_attributions(
@@ -58,13 +65,12 @@ class Attributor:
         token_ids: torch.Tensor = torch.tensor(
             self.tokenizer(input_string).input_ids
         ).to(self.device)
-        embeddings: torch.Tensor = self.model.transformer.wte.weight.detach()
         input_length: int = token_ids.shape[0]
 
         attr_scores = torch.zeros(generation_length, generation_length + len(token_ids))
 
         for it in range(generation_length):
-            input_embeddings = self._get_input_embeddings(embeddings, token_ids)
+            input_embeddings = self._get_input_embeddings(self.embeddings, token_ids)
             output = self.model(inputs_embeds=input_embeddings)
 
             gen_tokens, next_token_id = self._generate_tokens(
@@ -126,7 +132,7 @@ class Attributor:
 
     def _generate_tokens(
         self,
-        model: transformers.GPT2LMHeadModel,
+        model: nn.Module,
         token_ids: torch.Tensor,
         tokenizer: transformers.PreTrainedTokenizerBase,
     ):
@@ -166,7 +172,7 @@ class Attributor:
 
     def _validate_inputs(
         self,
-        model: transformers.GPT2LMHeadModel,
+        model: nn.Module,
         tokenizer: transformers.PreTrainedTokenizerBase,
         input_string: str,
         generation_length: int,
