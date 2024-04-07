@@ -1,4 +1,4 @@
-name: Unit tests
+name: Tests
 
 on:
   workflow_call:
@@ -24,4 +24,7 @@ jobs:
         uses: chartboost/ruff-action@v1
 
       - name: Unit test
-        run: python -m pytest
+        run: python -m pytest tests/unit
+
+      - name: Integration test
+        run: python -m pytest tests/integration

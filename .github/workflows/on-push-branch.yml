@@ -7,6 +7,6 @@ on:
       - "!main"
 
 jobs:
-  unit:
-    name: Unit Tests
-    uses: ./.github/workflows/unit.yml
+  test:
+    name: Tests
+    uses: ./.github/workflows/test.yml

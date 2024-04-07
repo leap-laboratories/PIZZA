@@ -127,3 +127,19 @@ To contribute to the library, you will need to install the development requireme
 ```bash
 uv pip install -r requirements-dev.txt
 ```
+
+## Testing
+
+This project uses pytest for unit and integration testing.
+
+To run the unit tests:
+
+```bash
+python -m pytest tests/unit
+```
+
+To run the integration tests:
+
+```bash
+python -m pytest tests/integration
+```
