@@ -78,9 +78,7 @@ class Attributor:
             output = self.model(inputs_embeds=input_embeddings)
 
             # Get actual next tokens using standard sampling of model
-            gen_tokens, next_token_id = self._generate_tokens(
-                self.model, token_ids, self.tokenizer
-            )
+            gen_tokens, next_token_id = self._generate_tokens(self.model, token_ids)
 
             logging.info(f"{self.tokenizer.decode(gen_tokens[0])}")
 
@@ -146,15 +144,11 @@ class Attributor:
         self,
         model: nn.Module,
         token_ids: torch.Tensor,
-        tokenizer: transformers.PreTrainedTokenizerBase,
     ):
-        attention_mask = torch.ones(token_ids.shape).unsqueeze(0).to(self.device)
         with torch.no_grad():
             gen_tokens = model.generate(
                 token_ids.unsqueeze(0),
                 max_new_tokens=1,
-                attention_mask=attention_mask,
-                pad_token_id=tokenizer.eos_token_id,
             )
         next_token_id = gen_tokens[0][-1]
         return gen_tokens, next_token_id
