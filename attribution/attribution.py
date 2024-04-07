@@ -67,23 +67,35 @@ class Attributor:
         ).to(self.device)
         input_length: int = token_ids.shape[0]
 
+        # Create initial attribution matrix
         attr_scores = torch.zeros(generation_length, generation_length + len(token_ids))
 
         for it in range(generation_length):
+            # Convert input tokens to embeddings with gradients
             input_embeddings = self._get_input_embeddings(self.embeddings, token_ids)
+
+            # Get model output logits using input embeddings and no sampling
             output = self.model(inputs_embeds=input_embeddings)
 
+            # Get actual next tokens using standard sampling of model
             gen_tokens, next_token_id = self._generate_tokens(
                 self.model, token_ids, self.tokenizer
             )
+
             logging.info(f"{self.tokenizer.decode(gen_tokens[0])}")
+
+            # Given the output logits and the next token, compute the gradients for this token with respect to the input embeddings
             grad = self._get_gradients(output, next_token_id, input_embeddings)
 
+            # From the gradients, compute the attribution matrix row for this token
             attr_scores_next_token = self._get_attr_scores_next_token(
                 grad, token_ids, generation_length + input_length
             )
 
+            # Append new attribution row to the attribution matrix
             attr_scores[it] = attr_scores_next_token
+
+            # Append the new token to the input tokens
             token_ids = torch.cat((token_ids, next_token_id.view(-1)), dim=0)
 
         return attr_scores, token_ids
