@@ -39,22 +39,19 @@ Now, you should be able to import and use the library in your Python scripts.
 
 ## Usage
 
-Here is a basic example of how to use the library:
+Usage examples can be found in the `examples/` folder.
+
+The following shows a simple example of attrubution using gemma-2b:
 
 ```python
-import transformers
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from attribution.attribution import Attributor
 
-model_name = "distilgpt2"
-tokenizer = transformers.GPT2Tokenizer.from_pretrained(model_name, padding_side="left")
-model = transformers.GPT2LMHeadModel.from_pretrained(model_name)
-
-if not isinstance(model, transformers.GPT2LMHeadModel):
-    raise ValueError("model not found")
-
-embeddings = model.transformer.wte.weight.detach()
-model.eval()
+model_id = "google/gemma-2b-it"
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto").cuda()
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+embeddings = model.get_input_embeddings().weight.detach()
 
 attributor = Attributor(model=model, embeddings=embeddings, tokenizer=tokenizer)
 attr_scores, token_ids = attributor.get_attributions(
@@ -63,16 +60,20 @@ attr_scores, token_ids = attributor.get_attributions(
 )
 
 attributor.print_attributions(
-    word_list=[tokenizer.decode(token_id) for token_id in token_ids],
+    word_list=tokenizer.convert_ids_to_tokens(token_ids),
     attr_scores=attr_scores,
     token_ids=token_ids,
     generation_length=7,
 )
 ```
 
-You can run this script with `example.py`.
-
 ### Limitations
+
+#### Batch dimensions
+
+Currently this library only supports models that take inputs with a batch dimension. This is common across most modern models, but not always the case (e.g. GPT2).
+
+#### Input Embeddings
 
 This library only supports models that have a common interface to pass in embeddings, and generate outputs without sampling of the form:
 

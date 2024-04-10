@@ -75,7 +75,7 @@ class Attributor:
             input_embeddings = self._get_input_embeddings(self.embeddings, token_ids)
 
             # Get model output logits using input embeddings and no sampling
-            output = self.model(inputs_embeds=input_embeddings)
+            output = self.model(inputs_embeds=input_embeddings.unsqueeze(0))
 
             # Get actual next tokens using standard sampling of model
             gen_tokens, next_token_id = self._generate_tokens(self.model, token_ids)
@@ -159,7 +159,7 @@ class Attributor:
         next_token_id: torch.Tensor,
         input_embeddings: torch.Tensor,
     ) -> torch.Tensor:
-        softmax_output = torch.softmax(output.logits, dim=1)
+        softmax_output = torch.softmax(output.logits, dim=1).squeeze()
         softmax_output[-1, next_token_id].backward()
 
         if input_embeddings.grad is None:
