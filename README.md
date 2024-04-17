@@ -4,9 +4,35 @@ The LLM Attribution Library is a Python package designed to compute the attribut
 
 ![Attribution Table](docs/assets/table.png)
 
+- [LLM Attribution Library](#llm-attribution-library)
+  - [Technical Overview](#technical-overview)
+  - [Requirements](#requirements)
+    - [Packaging](#packaging)
+    - [Linting](#linting)
+  - [Installation](#installation)
+  - [Usage](#usage)
+    - [Limitations](#limitations)
+      - [Batch dimensions](#batch-dimensions)
+      - [Input Embeddings](#input-embeddings)
+    - [GPU Acceleration](#gpu-acceleration)
+    - [Logging](#logging)
+    - [Cleaning Up](#cleaning-up)
+  - [Development](#development)
+  - [Testing](#testing)
+
 ## Technical Overview
 
 The library uses gradient-based attribution to quantify the influence of input tokens on the output of a GPT-2 model. For each output token, it computes the gradients with respect to the input embeddings. The L1 norm of these gradients is then used as the attribution score, representing the total influence of each input token on the output. This approach provides a direct measure of the sensitivity of the output to changes in the input, aiding in model interpretation and diagnosis.
+
+## Requirements
+
+### Packaging
+
+This project uses [uv](https://github.com/astral-sh/uv) for package management. To install `uv`, follow the installation instructions in the [uv docs](https://github.com/astral-sh/uv?tab=readme-ov-file#getting-started).
+
+### Linting
+
+This project uses [ruff](https://github.com/astral-sh/ruff) for linting and formatting. To install `ruff`, follow the installation instructions in the [ruff docs](https://github.com/astral-sh/ruff?tab=readme-ov-file#getting-started).
 
 ## Installation
 
