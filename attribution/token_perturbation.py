@@ -1,19 +1,30 @@
 from typing import List
 
 import numpy as np
-import torch
 from sklearn.neighbors import NearestNeighbors
 from transformers import PreTrainedTokenizer
 
+FIXED_REPLACEMENT_TOKEN = "the"
 
-def calculate_cosine_distances_between_tokens(
-    word_token_embeddings: torch.Tensor,
-) -> torch.Tensor:
-    normalized_embeddings = torch.nn.functional.normalize(
-        word_token_embeddings, p=2, dim=1
-    )
-    dot_product = torch.matmul(normalized_embeddings, normalized_embeddings.T)
-    return 1 - dot_product
+
+def get_replacement_token(
+    token_id_to_replace: int,
+    perturbation_strategy: str,
+    embeddings: np.ndarray = None,
+    tokenizer: PreTrainedTokenizer = None,
+) -> int:
+    if perturbation_strategy == "fixed":
+        return tokenizer.encode(FIXED_REPLACEMENT_TOKEN, add_special_tokens=False)[0]
+    elif perturbation_strategy == "distant":
+        return get_increasingly_distant_token_ids(
+            token_id_to_replace, embeddings, n_tokens=4
+        )[-1]
+    elif perturbation_strategy == "nearest":
+        return get_most_similar_token_ids(
+            token_id_to_replace, embeddings, tokenizer, 2
+        )[1]
+    else:
+        raise ValueError(f"Unknown perturbation strategy: {perturbation_strategy}")
 
 
 def sort_tokens_by_similarity(
@@ -39,7 +50,7 @@ def sort_tokens_by_similarity(
     return top_indices
 
 
-def get_most_similar_tokens(
+def get_most_similar_token_ids(
     token_id: int,
     embeddings: np.ndarray,
     tokenizer: PreTrainedTokenizer,
@@ -56,7 +67,7 @@ def get_most_similar_tokens(
     return indices.flatten().tolist()
 
 
-def get_increasingly_distant_tokens(
+def get_increasingly_distant_token_ids(
     token_id: int,
     embeddings: np.ndarray,
     n_tokens: int = 1,
