@@ -17,7 +17,7 @@ def token_prob_difference(
     ]
     initial_tokens = [content.token for content in initial_logprobs.content]
 
-    # Create a list of dictionaries with token and logprob from perturbed_logprobs
+    # Create a list of dictionaries with token and top logprobs from perturbed_logprobs
     perturbed_token_logprobs_list = [
         {
             top_logprob.token: top_logprob.logprob
@@ -70,11 +70,13 @@ def token_displacement(
     return displacement_per_token.mean(), initial_tokens, displacement_per_token
 
 
-def max_logprob_difference(
+# NOTE: this metric does not work. It's left to serve as discussion
+def deprecated_max_logprob_difference(
     initial_logprobs: openai.types.chat.chat_completion.ChoiceLogprobs,
     perturbed_logprobs: openai.types.chat.chat_completion.ChoiceLogprobs,
 ):
     # Get the logprobs of the top 20 tokens for the initial and perturbed outputs
+    # Warning: this should probably be a list with the top logprobs at each token position instead
     initial_top_logprobs = {
         logprob.token: logprob.logprob for logprob in initial_logprobs.content
     }
