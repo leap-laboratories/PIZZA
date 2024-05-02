@@ -1,5 +1,6 @@
 import os
 import pickle
+import time
 
 import pandas as pd
 from IPython.core.getipython import get_ipython
@@ -14,6 +15,7 @@ class ExperimentLogger:
                 "original_input",
                 "original_output",
                 "perturbation_strategy",
+                "duration",
             ]
         )
         self.df_input_token_attribution = pd.DataFrame(
@@ -48,16 +50,23 @@ class ExperimentLogger:
             ]
         )
 
-    def log_experiment(
+    def start_experiment(
         self, original_input: str, original_output: str, perturbation_strategy: str
     ):
         self.experiment_id += 1
+        self.experiment_start_time = time.time()
         self.df_experiments.loc[len(self.df_experiments)] = {
             "exp_id": self.experiment_id,
             "original_input": original_input,
             "original_output": original_output,
             "perturbation_strategy": perturbation_strategy,
+            "duration": None,
         }
+
+    def stop_experiment(self):
+        self.df_experiments.loc[len(self.df_experiments) - 1, "duration"] = (
+            time.time() - self.experiment_start_time
+        )
 
     def log_input_token_attribution(
         self,
@@ -146,62 +155,70 @@ class ExperimentLogger:
         df_sentences = pd.DataFrame(sentences)
         self.pretty_print(df_sentences)
 
-    def print_attribution_matrix(self, exp_id: int, attribution_strategy: str):
-        # Filter the data for the specific experiment and attribution strategy
-        exp_data = self.df_token_attribution_matrix[
-            (self.df_token_attribution_matrix["exp_id"] == exp_id)
-            & (
-                self.df_token_attribution_matrix["attribution_strategy"]
-                == attribution_strategy
-            )
-        ]
-        perturbation_strategy = self.df_experiments.loc[
-            self.df_experiments["exp_id"] == exp_id, "perturbation_strategy"
-        ].values[0]
-
-        # Create the pivot table for the matrix
-        matrix = exp_data.pivot(
-            index="input_token_pos", columns="output_token_pos", values="attr_score"
-        )
-
-        # Retrieve and clean tokens
-        input_tokens = self.clean_tokens(
-            self.df_input_token_attribution[
-                (self.df_input_token_attribution["exp_id"] == exp_id)
+    def print_attribution_matrix(self, exp_id: int, attribution_strategy: str = None):
+        if attribution_strategy is None:
+            unique_strategies = self.df_token_attribution_matrix[
+                "attribution_strategy"
+            ].unique()
+            for strategy in unique_strategies:
+                self.print_attribution_matrix(exp_id, strategy)
+        else:
+            # Filter the data for the specific experiment and attribution strategy
+            exp_data = self.df_token_attribution_matrix[
+                (self.df_token_attribution_matrix["exp_id"] == exp_id)
                 & (
-                    self.df_input_token_attribution["attribution_strategy"]
+                    self.df_token_attribution_matrix["attribution_strategy"]
                     == attribution_strategy
                 )
-            ]["input_token"].tolist()
-        )
+            ]
+            perturbation_strategy = self.df_experiments.loc[
+                self.df_experiments["exp_id"] == exp_id, "perturbation_strategy"
+            ].values[0]
 
-        output_tokens = self.clean_tokens(exp_data["output_token"].unique().tolist())
+            # Create the pivot table for the matrix
+            matrix = exp_data.pivot(
+                index="input_token_pos", columns="output_token_pos", values="attr_score"
+            )
 
-        # Append positions to tokens for uniqueness
-        input_tokens_with_pos = [
-            f"{token} ({i})" for i, token in enumerate(input_tokens)
-        ]
-        output_tokens_with_pos = [
-            f"{token} ({i})" for i, token in enumerate(output_tokens)
-        ]
+            # Retrieve and clean tokens
+            input_tokens = self.clean_tokens(
+                self.df_input_token_attribution[
+                    (self.df_input_token_attribution["exp_id"] == exp_id)
+                    & (
+                        self.df_input_token_attribution["attribution_strategy"]
+                        == attribution_strategy
+                    )
+                ]["input_token"].tolist()
+            )
+            output_tokens = self.clean_tokens(
+                exp_data["output_token"].unique().tolist()
+            )
 
-        # Retrieve the output tokens for the columns
-        output_tokens = exp_data["output_token"].unique().tolist()
+            # Append positions to tokens for uniqueness
+            input_tokens_with_pos = [
+                f"{token} ({i})" for i, token in enumerate(input_tokens)
+            ]
+            output_tokens_with_pos = [
+                f"{token} ({i})" for i, token in enumerate(output_tokens)
+            ]
 
-        # Set the row and column names of the matrix
-        matrix.index = input_tokens_with_pos
-        matrix.columns = output_tokens_with_pos
+            # Retrieve the output tokens for the columns
+            output_tokens = exp_data["output_token"].unique().tolist()
 
-        print(
-            f"Attribution matrix for {attribution_strategy} with perturbation strategy {perturbation_strategy}:"
-        )
-        print("Input Tokens (Rows) vs. Output Tokens (Columns)")
-        if "IPKernelApp" in get_ipython().config:
-            from IPython.display import display
+            # Set the row and column names of the matrix
+            matrix.index = input_tokens_with_pos
+            matrix.columns = output_tokens_with_pos
 
-            display(matrix.style.background_gradient(cmap="YlOrRd"))
-        else:
-            print(matrix)
+            print(
+                f"Attribution matrix for {attribution_strategy} with perturbation strategy {perturbation_strategy}:"
+            )
+            print("Input Tokens (Rows) vs. Output Tokens (Columns)")
+            if "IPKernelApp" in get_ipython().config:
+                from IPython.display import display
+
+                display(matrix.style.background_gradient(cmap="YlOrRd"))
+            else:
+                print(matrix)
 
     def pretty_print(self, df: pd.DataFrame):
         # Check if code is running in Jupyter notebook
