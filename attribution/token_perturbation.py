@@ -4,7 +4,7 @@ import numpy as np
 from sklearn.neighbors import NearestNeighbors
 from transformers import PreTrainedTokenizer
 
-FIXED_REPLACEMENT_TOKEN = "the"
+FIXED_REPLACEMENT_TOKEN = " "
 
 
 def get_replacement_token(
