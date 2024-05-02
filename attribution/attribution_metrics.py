@@ -63,7 +63,7 @@ def token_displacement(
     MAX_TOKEN_DISPLACEMENT = 20
     for i, token in enumerate(initial_tokens):
         if i < len(perturbed_top_tokens) and token in perturbed_top_tokens[i]:
-            displacement_per_token[i] = abs(i - perturbed_top_tokens[i].index(token))
+            displacement_per_token[i] = perturbed_top_tokens[i].index(token)
         else:
             displacement_per_token[i] = MAX_TOKEN_DISPLACEMENT  # TODO: Revise
 
