@@ -109,34 +109,40 @@ def cosine_similarity_attribution(
     tokenizer: PreTrainedTokenizer,
 ) -> Tuple[float, np.ndarray]:
     # Extract embeddings
-    initial_sentence_emb, initial_token_embs = get_sentence_embeddings(
+    initial_output_sentence_emb, initial_output_token_embs = get_sentence_embeddings(
         original_output_choice.message.content, model, tokenizer
     )
-    perturbed_sentence_emb, perturbed_token_embs = get_sentence_embeddings(
-        perturbed_output_choice.message.content, model, tokenizer
+    perturbed_output_sentence_emb, perturbed_output_token_embs = (
+        get_sentence_embeddings(
+            perturbed_output_choice.message.content, model, tokenizer
+        )
     )
 
     # Reshape embeddings
-    initial_sentence_emb = initial_sentence_emb.reshape(1, -1)
-    perturbed_sentence_emb = perturbed_sentence_emb.reshape(1, -1)
+    initial_output_sentence_emb = initial_output_sentence_emb.reshape(1, -1)
+    perturbed_output_sentence_emb = perturbed_output_sentence_emb.reshape(1, -1)
 
     # Calculate similarities
     self_similarity = float(
-        cosine_similarity(initial_sentence_emb, initial_sentence_emb)
+        cosine_similarity(initial_output_sentence_emb, initial_output_sentence_emb)
     )
     sentence_similarity = float(
-        cosine_similarity(initial_sentence_emb, perturbed_sentence_emb)
+        cosine_similarity(initial_output_sentence_emb, perturbed_output_sentence_emb)
     )
 
     # Calculate token similarities for shared length
-    shared_length = min(initial_token_embs.shape[0], perturbed_token_embs.shape[0])
+    shared_length = min(
+        initial_output_token_embs.shape[0], perturbed_output_token_embs.shape[0]
+    )
     token_similarities_shared = cosine_similarity(
-        initial_token_embs[:shared_length], perturbed_token_embs[:shared_length]
+        initial_output_token_embs[:shared_length],
+        perturbed_output_token_embs[:shared_length],
     ).diagonal()
 
     # Pad token similarities to match initial token embeddings shape
     token_similarities = np.pad(
-        token_similarities_shared, (0, initial_token_embs.shape[0] - shared_length)
+        token_similarities_shared,
+        (0, initial_output_token_embs.shape[0] - shared_length),
     )
 
     # Return difference in sentence similarity and token similarities
