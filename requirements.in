@@ -1,4 +1,5 @@
 openai==1.19.0
+pandas==2.2.2
 python-dotenv==1.0.1
 rich==13.7.1
 scikit-learn==1.4.2

@@ -16,13 +16,9 @@ def get_replacement_token(
     if perturbation_strategy == "fixed":
         return tokenizer.encode(FIXED_REPLACEMENT_TOKEN, add_special_tokens=False)[0]
     elif perturbation_strategy == "distant":
-        return get_increasingly_distant_token_ids(
-            token_id_to_replace, embeddings, n_tokens=4
-        )[-1]
+        return sort_tokens_by_similarity(token_id_to_replace, embeddings)[-1]
     elif perturbation_strategy == "nearest":
-        return get_most_similar_token_ids(
-            token_id_to_replace, embeddings, tokenizer, 2
-        )[1]
+        return get_most_similar_token_ids(token_id_to_replace, embeddings, tokenizer, 2)[1]
     else:
         raise ValueError(f"Unknown perturbation strategy: {perturbation_strategy}")
 
@@ -30,18 +26,20 @@ def get_replacement_token(
 def sort_tokens_by_similarity(
     reference_token_id: int,
     embeddings: np.ndarray,
-    n_tokens: int = 1,
+    n_tokens: int = None,
 ) -> List[int]:
     token_embedding = embeddings[reference_token_id, :]
 
     # Normalize the embeddings
-    normalized_embeddings = embeddings / np.linalg.norm(
-        embeddings, axis=1, keepdims=True
-    )
+    normalized_embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
     normalized_token_embedding = token_embedding / np.linalg.norm(token_embedding)
 
     # Compute the cosine similarity
     cosine_similarities = np.dot(normalized_embeddings, normalized_token_embedding)
+
+    # If n_tokens is None, return all tokens sorted by similarity
+    if n_tokens is None:
+        n_tokens = len(cosine_similarities)
 
     # Get the indices of the top n_tokens most similar tokens
     top_indices = np.argpartition(cosine_similarities, -n_tokens)[-n_tokens:]
@@ -80,9 +78,7 @@ def get_increasingly_distant_token_ids(
     positions = sorted(positions)[:n_tokens]
 
     # Get the tokens sorted by similarity
-    sorted_tokens = sort_tokens_by_similarity(
-        token_id, embeddings, n_tokens=max(positions)
-    )
+    sorted_tokens = sort_tokens_by_similarity(token_id, embeddings, n_tokens=max(positions))
 
     # Return the tokens at the specified positions
     return [sorted_tokens[pos - 1] for pos in positions]
