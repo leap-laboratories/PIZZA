@@ -2,7 +2,7 @@ import pytest
 import torch
 import transformers
 
-from attribution.attribution import Attributor
+from attribution.local_attribution import Attributor
 
 
 @pytest.fixture
@@ -21,9 +21,7 @@ def embeddings(model):
 
 @pytest.fixture
 def tokenizer():
-    tokenizer = transformers.GPT2Tokenizer.from_pretrained(
-        "distilgpt2", padding_side="left"
-    )
+    tokenizer = transformers.GPT2Tokenizer.from_pretrained("distilgpt2", padding_side="left")
     tokenizer.pad_token = tokenizer.eos_token
     return tokenizer
 

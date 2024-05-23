@@ -4,7 +4,7 @@ import pytest
 import torch
 from torch import nn
 
-from attribution.attribution import Attributor
+from attribution.local_attribution import Attributor
 
 
 @pytest.fixture
@@ -29,9 +29,7 @@ def test_get_input_embeddings(attributor):
 
     input_embeddings = attributor._get_input_embeddings(embeddings, token_ids)
 
-    assert torch.equal(
-        input_embeddings, torch.tensor([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
-    )
+    assert torch.equal(input_embeddings, torch.tensor([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]))
     assert input_embeddings.requires_grad
 
 
