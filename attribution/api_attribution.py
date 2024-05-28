@@ -80,7 +80,7 @@ class APILLMAttributor(BaseLLMAttributor):
                 perturb_word_wise,
             )
 
-        # A unit is either a word or a single token
+        # A unit is either a word or a single token, depending on the value of `perturb_word_wise`
         unit_offset = 0
         if perturb_word_wise:
             words = input_text.split()
@@ -153,6 +153,8 @@ class APILLMAttributor(BaseLLMAttributor):
                                 j,
                                 attributed_tokens[j],
                                 attr_score.squeeze(),
+                                self.local_tokenizer.decode(replacement_token_ids),
+                                perturbed_output.message.content,
                             )
             unit_offset += len(unit_tokens)
 

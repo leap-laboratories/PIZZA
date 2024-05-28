@@ -1,6 +1,7 @@
 import os
 import pickle
 import time
+from typing import Optional
 
 import pandas as pd
 from IPython.core.getipython import get_ipython
@@ -38,6 +39,8 @@ class ExperimentLogger:
                 "output_token_pos",
                 "output_token",
                 "attr_score",
+                "replacement_token",
+                "perturbed_output",
             ]
         )
         self.df_perturbations = pd.DataFrame(
@@ -98,6 +101,8 @@ class ExperimentLogger:
         output_token_pos: int,
         output_token: str,
         attr_score: float,
+        replacement_token: str,
+        perturbed_output: str,
     ):
         self.df_token_attribution_matrix.loc[len(self.df_token_attribution_matrix)] = {
             "exp_id": self.experiment_id,
@@ -106,6 +111,8 @@ class ExperimentLogger:
             "output_token_pos": output_token_pos,
             "output_token": output_token,
             "attr_score": attr_score,
+            "replacement_token": replacement_token,
+            "perturbed_output": perturbed_output,
         }
 
     def log_perturbation(
@@ -165,11 +172,20 @@ class ExperimentLogger:
         df_sentences = pd.DataFrame(sentences)
         self.pretty_print(df_sentences)
 
-    def print_attribution_matrix(self, exp_id: int, attribution_strategy: str = None):
+    def print_attribution_matrix(
+        self,
+        exp_id: int,
+        attribution_strategy: Optional[str] = None,
+        show_debug_cols: bool = False,
+    ):
         if attribution_strategy is None:
             unique_strategies = self.df_token_attribution_matrix["attribution_strategy"].unique()
             for strategy in unique_strategies:
-                self.print_attribution_matrix(exp_id, strategy)
+                self.print_attribution_matrix(
+                    exp_id,
+                    attribution_strategy=strategy,
+                    show_debug_cols=show_debug_cols,
+                )
         else:
             # Filter the data for the specific experiment and attribution strategy
             exp_data = self.df_token_attribution_matrix[
@@ -212,9 +228,21 @@ class ExperimentLogger:
             matrix.columns = output_tokens_with_pos
 
             print(
-                f"Attribution matrix for {attribution_strategy} with perturbation strategy {perturbation_strategy}:"
+                f"Attribution matrix for experiment {exp_id} \nAttribution Strategy: {attribution_strategy} \nPerturbation strategy: {perturbation_strategy}:"
             )
             print("Input Tokens (Rows) vs. Output Tokens (Columns)")
+
+            if show_debug_cols:
+                additional_columns = exp_data[
+                    ["input_token_pos", "replacement_token", "perturbed_output"]
+                ].drop_duplicates()
+                additional_columns = additional_columns.set_index(
+                    additional_columns["input_token_pos"].apply(
+                        lambda x: f"{input_tokens[x]} ({x})"
+                    )
+                )
+                additional_columns = additional_columns[["replacement_token", "perturbed_output"]]
+                matrix = matrix.join(additional_columns)
             if "IPKernelApp" in get_ipython().config:
                 from IPython.display import display
 
