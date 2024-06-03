@@ -19,10 +19,7 @@ def token_prob_difference(
 
     # Create a list of dictionaries with token and top logprobs from perturbed_logprobs
     perturbed_token_logprobs_list = [
-        {
-            top_logprob.token: top_logprob.logprob
-            for top_logprob in token_content.top_logprobs
-        }
+        {top_logprob.token: top_logprob.logprob for top_logprob in token_content.top_logprobs}
         for token_content in perturbed_logprobs.content
     ]
 
@@ -33,16 +30,10 @@ def token_prob_difference(
     # Calculate the absolute difference in probabilities for each token
     for i, initial_token in enumerate(initial_token_logprobs):
         perturbed_token_logprobs = (
-            perturbed_token_logprobs_list[i]
-            if i < len(perturbed_token_logprobs_list)
-            else {}
+            perturbed_token_logprobs_list[i] if i < len(perturbed_token_logprobs_list) else {}
         )
-        perturbed_logprob = perturbed_token_logprobs.get(
-            initial_token[0], NEAR_ZERO_PROB
-        )
-        prob_difference_per_token[i] = abs(
-            math.exp(initial_token[1]) - math.exp(perturbed_logprob)
-        )
+        perturbed_logprob = perturbed_token_logprobs.get(initial_token[0], NEAR_ZERO_PROB)
+        prob_difference_per_token[i] = abs(math.exp(initial_token[1]) - math.exp(perturbed_logprob))
 
     # Note: Different length outputs shift the mean upwards. This may or may not be desired behaviour.
     return prob_difference_per_token.mean(), initial_tokens, prob_difference_per_token
@@ -77,9 +68,7 @@ def deprecated_max_logprob_difference(
 ):
     # Get the logprobs of the top 20 tokens for the initial and perturbed outputs
     # Warning: this should probably be a list with the top logprobs at each token position instead
-    initial_top_logprobs = {
-        logprob.token: logprob.logprob for logprob in initial_logprobs.content
-    }
+    initial_top_logprobs = {logprob.token: logprob.logprob for logprob in initial_logprobs.content}
     perturbed_top_logprobs = {
         logprob.token: logprob.logprob for logprob in perturbed_logprobs.content
     }
@@ -98,7 +87,7 @@ def get_sentence_embeddings(
 ) -> Tuple[np.ndarray, np.ndarray]:
     inputs = tokenizer(sentence, return_tensors="pt")
     embeddings = model.transformer.wte(inputs["input_ids"])  # Get the embeddings
-    embeddings = embeddings.detach().numpy().squeeze()
+    embeddings = embeddings.detach().numpy().squeeze(axis=0)
     return embeddings.mean(axis=0), embeddings
 
 
@@ -112,10 +101,8 @@ def cosine_similarity_attribution(
     initial_output_sentence_emb, initial_output_token_embs = get_sentence_embeddings(
         original_output_choice.message.content, model, tokenizer
     )
-    perturbed_output_sentence_emb, perturbed_output_token_embs = (
-        get_sentence_embeddings(
-            perturbed_output_choice.message.content, model, tokenizer
-        )
+    perturbed_output_sentence_emb, perturbed_output_token_embs = get_sentence_embeddings(
+        perturbed_output_choice.message.content, model, tokenizer
     )
 
     # Reshape embeddings
@@ -131,9 +118,7 @@ def cosine_similarity_attribution(
     )
 
     # Calculate token similarities for shared length
-    shared_length = min(
-        initial_output_token_embs.shape[0], perturbed_output_token_embs.shape[0]
-    )
+    shared_length = min(initial_output_token_embs.shape[0], perturbed_output_token_embs.shape[0])
     token_similarities_shared = cosine_similarity(
         initial_output_token_embs[:shared_length],
         perturbed_output_token_embs[:shared_length],
@@ -171,7 +156,5 @@ def any_tokens_in_top_20(
 
     return any(
         _is_token_in_top_20(initial_token.token, new_token.top_logprobs)
-        for initial_token, new_token in zip(
-            initial_logprobs.content, new_logprobs.content
-        )
+        for initial_token, new_token in zip(initial_logprobs.content, new_logprobs.content)
     )

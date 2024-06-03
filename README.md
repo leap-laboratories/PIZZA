@@ -55,13 +55,24 @@ uv venv
 source .venv/bin/activate
 ```
 
-4. Install the requirements:
+4. To install the dependencies needed to use the library:
 
 ```bash
 uv pip install -r requirements.txt
 ```
 
+Or to install the dependencies needed to do development on the library:
+```bash
+uv pip install -r requirements-dev.txt
+```
+
 Now, you should be able to import and use the library in your Python scripts.
+
+5. To update the lock files that specify the dependency versions:
+```bash
+uv pip compile requirements.in -o requirements.txt
+uv pip compile requirements-dev.in -o requirements-dev.txt
+```
 
 ## Usage
 

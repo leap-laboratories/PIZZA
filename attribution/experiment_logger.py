@@ -1,9 +1,12 @@
 import os
 import pickle
 import time
+from typing import Optional
 
 import pandas as pd
 from IPython.core.getipython import get_ipython
+
+from .token_perturbation import PerturbationStrategy
 
 
 class ExperimentLogger:
@@ -36,6 +39,8 @@ class ExperimentLogger:
                 "output_token_pos",
                 "output_token",
                 "attr_score",
+                "replacement_token",
+                "perturbed_output",
             ]
         )
         self.df_perturbations = pd.DataFrame(
@@ -55,7 +60,7 @@ class ExperimentLogger:
         self,
         original_input: str,
         original_output: str,
-        perturbation_strategy: str,
+        perturbation_strategy: PerturbationStrategy,
         perturb_word_wise: bool,
     ):
         self.experiment_id += 1
@@ -64,7 +69,7 @@ class ExperimentLogger:
             "exp_id": self.experiment_id,
             "original_input": original_input,
             "original_output": original_output,
-            "perturbation_strategy": perturbation_strategy,
+            "perturbation_strategy": str(perturbation_strategy),
             "perturb_word_wise": perturb_word_wise,
             "duration": None,
         }
@@ -96,6 +101,8 @@ class ExperimentLogger:
         output_token_pos: int,
         output_token: str,
         attr_score: float,
+        replacement_token: str,
+        perturbed_output: str,
     ):
         self.df_token_attribution_matrix.loc[len(self.df_token_attribution_matrix)] = {
             "exp_id": self.experiment_id,
@@ -104,6 +111,8 @@ class ExperimentLogger:
             "output_token_pos": output_token_pos,
             "output_token": output_token,
             "attr_score": attr_score,
+            "replacement_token": replacement_token,
+            "perturbed_output": perturbed_output,
         }
 
     def log_perturbation(
@@ -139,9 +148,7 @@ class ExperimentLogger:
             tokens = self.clean_tokens(exp_data["input_token"].tolist())
             attr_scores = exp_data["attr_score"].tolist()
 
-            token_attrs = [
-                f"{token}\n{score:.2f}" for token, score in zip(tokens, attr_scores)
-            ]
+            token_attrs = [f"{token}\n{score:.2f}" for token, score in zip(tokens, attr_scores)]
 
             perturbation_strategy = self.df_experiments.loc[
                 self.df_experiments["exp_id"] == exp_id, "perturbation_strategy"
@@ -165,21 +172,25 @@ class ExperimentLogger:
         df_sentences = pd.DataFrame(sentences)
         self.pretty_print(df_sentences)
 
-    def print_attribution_matrix(self, exp_id: int, attribution_strategy: str = None):
+    def print_attribution_matrix(
+        self,
+        exp_id: int,
+        attribution_strategy: Optional[str] = None,
+        show_debug_cols: bool = False,
+    ):
         if attribution_strategy is None:
-            unique_strategies = self.df_token_attribution_matrix[
-                "attribution_strategy"
-            ].unique()
+            unique_strategies = self.df_token_attribution_matrix["attribution_strategy"].unique()
             for strategy in unique_strategies:
-                self.print_attribution_matrix(exp_id, strategy)
+                self.print_attribution_matrix(
+                    exp_id,
+                    attribution_strategy=strategy,
+                    show_debug_cols=show_debug_cols,
+                )
         else:
             # Filter the data for the specific experiment and attribution strategy
             exp_data = self.df_token_attribution_matrix[
                 (self.df_token_attribution_matrix["exp_id"] == exp_id)
-                & (
-                    self.df_token_attribution_matrix["attribution_strategy"]
-                    == attribution_strategy
-                )
+                & (self.df_token_attribution_matrix["attribution_strategy"] == attribution_strategy)
             ]
             perturbation_strategy = self.df_experiments.loc[
                 self.df_experiments["exp_id"] == exp_id, "perturbation_strategy"
@@ -200,17 +211,14 @@ class ExperimentLogger:
                     )
                 ]["input_token"].tolist()
             )
+
             output_tokens = self.clean_tokens(
-                exp_data["output_token"].unique().tolist()
+                exp_data.loc[exp_data["input_token_pos"] == 0, "output_token"].tolist()
             )
 
             # Append positions to tokens for uniqueness
-            input_tokens_with_pos = [
-                f"{token} ({i})" for i, token in enumerate(input_tokens)
-            ]
-            output_tokens_with_pos = [
-                f"{token} ({i})" for i, token in enumerate(output_tokens)
-            ]
+            input_tokens_with_pos = [f"{token} ({i})" for i, token in enumerate(input_tokens)]
+            output_tokens_with_pos = [f"{token} ({i})" for i, token in enumerate(output_tokens)]
 
             # Retrieve the output tokens for the columns
             output_tokens = exp_data["output_token"].unique().tolist()
@@ -220,9 +228,21 @@ class ExperimentLogger:
             matrix.columns = output_tokens_with_pos
 
             print(
-                f"Attribution matrix for {attribution_strategy} with perturbation strategy {perturbation_strategy}:"
+                f"Attribution matrix for experiment {exp_id} \nAttribution Strategy: {attribution_strategy} \nPerturbation strategy: {perturbation_strategy}:"
             )
             print("Input Tokens (Rows) vs. Output Tokens (Columns)")
+
+            if show_debug_cols:
+                additional_columns = exp_data[
+                    ["input_token_pos", "replacement_token", "perturbed_output"]
+                ].drop_duplicates()
+                additional_columns = additional_columns.set_index(
+                    additional_columns["input_token_pos"].apply(
+                        lambda x: f"{input_tokens[x]} ({x})"
+                    )
+                )
+                additional_columns = additional_columns[["replacement_token", "perturbed_output"]]
+                matrix = matrix.join(additional_columns)
             if "IPKernelApp" in get_ipython().config:
                 from IPython.display import display
 
@@ -260,14 +280,10 @@ class ExperimentLogger:
             )
             df_pivot["attr_score", pos] = df_pivot["attr_score", pos].round(2)
             df_pivot[f"token_{pos}"] = (
-                df_pivot["token", pos].astype(str)
-                + "\n"
-                + df_pivot["attr_score", pos].astype(str)
+                df_pivot["token", pos].astype(str) + "\n" + df_pivot["attr_score", pos].astype(str)
             )
 
-        df_pivot = df_pivot.loc[
-            :, df_pivot.columns.get_level_values(0).str.startswith("token_")
-        ]
+        df_pivot = df_pivot.loc[:, df_pivot.columns.get_level_values(0).str.startswith("token_")]
         df_pivot.reset_index(inplace=True)
         styled_df = df_pivot.style.set_properties(**{"white-space": "pre-wrap"})
         return styled_df
