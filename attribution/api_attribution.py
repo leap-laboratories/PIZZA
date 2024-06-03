@@ -124,16 +124,9 @@ class APILLMAttributor(BaseLLMAttributor):
                     token_logprob.token for token_logprob in original_output.logprobs.content
                 ]
                 if attribution_strategy == "cosine":
-                    # print("changed ", unit_tokens)
-                    # print(f"{input_text} -> {perturbed_input}")
-                    # print(
-                    #     f"{original_output.message.content} -> {perturbed_output.message.content}"
-                    # )
                     sentence_attr, token_attributions = cosine_similarity_attribution(
                         original_output, perturbed_output, self.local_model, self.local_tokenizer
                     )
-                    # print("sentence_attr: ", sentence_attr)
-                    # print("token_attributions: ", token_attributions)
                 elif attribution_strategy == "prob_diff":
                     sentence_attr, attributed_tokens, token_attributions = token_prob_difference(
                         original_output.logprobs, perturbed_output.logprobs

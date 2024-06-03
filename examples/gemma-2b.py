@@ -18,8 +18,11 @@ attr_scores, token_ids = attributor.compute_attributions(
     generation_length=7,
 )
 
+word_list = tokenizer.convert_ids_to_tokens(token_ids.tolist())
+word_list = [word_list] if isinstance(word_list, str) else word_list
+
 attributor.print_attributions(
-    word_list=tokenizer.convert_ids_to_tokens(token_ids),  # type: ignore
+    word_list=word_list,
     attr_scores=attr_scores,
     token_ids=token_ids,
     generation_length=7,

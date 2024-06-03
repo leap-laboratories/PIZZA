@@ -87,7 +87,7 @@ def get_sentence_embeddings(
 ) -> Tuple[np.ndarray, np.ndarray]:
     inputs = tokenizer(sentence, return_tensors="pt")
     embeddings = model.transformer.wte(inputs["input_ids"])  # Get the embeddings
-    embeddings = embeddings.detach().numpy().squeeze()
+    embeddings = embeddings.detach().numpy().squeeze(axis=0)
     return embeddings.mean(axis=0), embeddings
 
 

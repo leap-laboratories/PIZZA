@@ -4,8 +4,6 @@ import numpy as np
 from sklearn.neighbors import NearestNeighbors
 from transformers import GPT2LMHeadModel, GPT2Tokenizer, PreTrainedTokenizer
 
-FIXED_REPLACEMENT_TOKEN = " "
-
 
 class PerturbationStrategy:
     def get_replacement_token(self, token_id_to_replace: int) -> int:
@@ -18,7 +16,7 @@ class FixedPerturbationStrategy(PerturbationStrategy):
         self.tokenizer = tokenizer or GPT2Tokenizer.from_pretrained("gpt2", add_prefix_space=True)
 
     def get_replacement_token(self, token_id_to_replace: int) -> int:
-        return self.tokenizer.encode(FIXED_REPLACEMENT_TOKEN, add_special_tokens=False)[0]
+        return self.tokenizer.encode(self.replacement_token, add_special_tokens=False)[0]
 
     def __str__(self):
         return "fixed"
@@ -81,9 +79,9 @@ def get_most_similar_token_ids(
     nbrs = NearestNeighbors(n_neighbors=n_tokens, algorithm="ball_tree").fit(embeddings)
 
     # Find the nearest neighbor
-    indices = nbrs.kneighbors(token_embedding.reshape(1, -1), return_distance=False)
+    indices, _ = nbrs.kneighbors(token_embedding.reshape(1, -1), return_distance=False)
 
-    return indices.flatten().tolist()  # type: ignore
+    return indices.flatten().tolist()
 
 
 def get_increasingly_distant_token_ids(

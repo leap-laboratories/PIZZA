@@ -4,7 +4,7 @@ import pytest
 import torch
 from torch import nn
 
-from attribution.local_attribution import Attributor
+from attribution.local_attribution import LocalLLMAttributor
 
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def attributor():
     tokenizer = Mock()
     tokenizer.encode.return_value = [0, 1, 2, 3]
 
-    return Attributor(model=model, embeddings=embeddings, tokenizer=tokenizer)
+    return LocalLLMAttributor(model=model, embeddings=embeddings, tokenizer=tokenizer)
 
 
 def test_get_input_embeddings(attributor):

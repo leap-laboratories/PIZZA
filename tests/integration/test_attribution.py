@@ -2,7 +2,7 @@ import pytest
 import torch
 import transformers
 
-from attribution.local_attribution import Attributor
+from attribution.local_attribution import LocalLLMAttributor
 
 
 @pytest.fixture
@@ -28,12 +28,12 @@ def tokenizer():
 
 @pytest.fixture
 def attributor(model, embeddings, tokenizer):
-    return Attributor(model=model, embeddings=embeddings, tokenizer=tokenizer)
+    return LocalLLMAttributor(model=model, embeddings=embeddings, tokenizer=tokenizer)
 
 
 def test_attribution(model, embeddings, tokenizer):
-    attributor = Attributor(model=model, embeddings=embeddings, tokenizer=tokenizer)
-    attr_scores, token_ids = attributor.get_attributions(
+    attributor = LocalLLMAttributor(model=model, embeddings=embeddings, tokenizer=tokenizer)
+    attr_scores, token_ids = attributor.compute_attributions(
         input_string="the five continents are asia, europe, afri",
         generation_length=7,
     )
