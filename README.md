@@ -263,3 +263,6 @@ To run the integration tests:
 ```bash
 python -m pytest tests/integration
 ```
+
+## Research 
+We provide a proof of concept library to showcase the usefulness of both Gradient-based and Perturbation-based feature attribution algorithms to better understand modern LLMs. Some preliminary exploration and research into using attribution and quantitatively measuring attribution success can be found in the research folder of this repository. We encourage experimentation using our library and welcome proposals for feature expansions, including algorithmic changes to our proposed attribution methods. We will constantly monitor the Issues tab of this repository and our email inbox `hello@leap-labs.com` for thoughtful comments and proposals.
