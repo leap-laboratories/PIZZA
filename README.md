@@ -265,4 +265,4 @@ python -m pytest tests/integration
 ```
 
 ## Research 
-We provide a minimal library to showcase the usefulness of feature attribution algorithms to better understand open and closed source modern LLMs. Some preliminary exploration and research into using attribution and quantitatively measuring attribution success can be found in the research folder of this repository. We encourage experimentation using our library and welcome proposals for feature expansions, including algorithmic changes to our proposed attribution methods. We will constantly monitor the Issues tab of this repository and our email inbox `hello@leap-labs.com` for thoughtful comments and proposals.
+Some preliminary exploration and research into using attribution and quantitatively measuring attribution success can be found in the research folder of this repository. We'd be excited to see expansion of this small library, including both algorithmic improvements, further attribution and perturbation methods, and more rigorous and exhaustive experimentation. We welcome pull requests and issues from external collaborators.
