@@ -2,13 +2,13 @@
 
 The LLM Attribution Library is designed to compute the contribution of each token in a prompt to the generated response of a language model.  
 
-It can be used with both local LLMs:  
-
-![Local LLM Attribution Table](docs/assets/local-PIZZA.png)
-
-And OpenAI LLMs accessible through an API:  
+It can be used with OpenAI LLMs accessible through an API:  
 ![API-accessible LLM Attribution Table](docs/assets/api-PIZZA.png)
 
+and local LLMs:
+![Local LLM Attribution Table](docs/assets/local-PIZZA.png)
+
+And 
 ## Index  
 - [Quickstart](#quickstart)
 - [Requirements](#requirements)
@@ -29,6 +29,34 @@ And OpenAI LLMs accessible through an API:
 - [Testing](#testing)
 
 ## Quickstart
+
+
+Attrubution via OpenAI's API:  
+
+# !!! This will use API credits !!!
+
+```python
+from attribution.api_attribution import OpenAIAttributor
+from attribution.experiment_logger import ExperimentLogger
+from attribution.token_perturbation import NthNearestPerturbationStrategy
+
+# set your "OPENAI_API_KEY" environment variable to your openai API key, or pass it here:
+attributor = OpenAIAttributor(openai_api_key=YOUR_OPENAI_API_KEY)
+logger = ExperimentLogger()
+
+input_text = "The clock shows 9:47 PM. How many minutes 'til 10?"
+attributor.compute_attributions(
+    input_text,
+    perturbation_strategy=NthNearestPerturbationStrategy(n=-1),
+    attribution_strategies=["cosine", "prob_diff", "token_displacement"],
+    logger=logger,
+    perturb_word_wise=True,
+)
+
+logger.print_sentence_attribution()
+logger.print_attribution_matrix(exp_id=1)
+
+```
 
 Example of gradient-based attrubution using gemma-2b locally:
 
@@ -55,31 +83,7 @@ attributor.print_attributions(
 )
 ```
 
-Attrubution using GPT-3 via OpenAI's API:  
-
-```python
-from attribution.api_attribution import OpenAIAttributor
-from attribution.experiment_logger import ExperimentLogger
-from attribution.token_perturbation import NthNearestPerturbationStrategy
-
-attributor = OpenAIAttributor()
-logger = ExperimentLogger()
-
-input_text = "The clock shows 9:47 PM. How many minutes 'til 10?"
-attributor.compute_attributions(
-    input_text,
-    perturbation_strategy=NthNearestPerturbationStrategy(n=-1),
-    attribution_strategies=["cosine", "prob_diff", "token_displacement"],
-    logger=logger,
-    perturb_word_wise=True,
-)
-
-logger.print_sentence_attribution()
-logger.print_attribution_matrix(exp_id=1)
-
-```
-
-Usage examples can be found in the `examples/` folder a more in-depth case study in `research/gemma-2b-case-study.ipynb`.
+Usage examples can be found in the `examples/` and `research/` folders. There's also a colab-hosted quickstart notebook [here](https://colab.research.google.com/drive/1yf6izSzZg2K88QyaJwAwkZPPyLP4pPa-?usp=sharing).
 
 ## Requirements
 
@@ -130,7 +134,6 @@ Now, you should be able to import and use the library in your Python scripts.
 uv pip compile requirements.in -o requirements.txt
 uv pip compile requirements-dev.in -o requirements-dev.txt
 ```
-
 
 ## API Design
 
@@ -197,13 +200,18 @@ The `compute_attributions` method:
 class OpenAIAttributor(BaseLLMAttributor):
     def __init__(
         self,
-        model: Optional[PreTrainedModel] = None,
+        openai_api_key: Optional[str] = None,
+        openai_model: Optional[str] = None,
         tokenizer: Optional[PreTrainedTokenizer] = None,
         token_embeddings: Optional[np.ndarray] = None,
     ):
-        ...
-    def compute_attributions(self, input_text: str, **kwargs):
-        ...
+        openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
+        self.openai_client = openai.OpenAI(api_key=openai_api_key)
+        self.openai_model = openai_model or "gpt-3.5-turbo"
+
+        self.tokenizer = tokenizer or GPT2Tokenizer.from_pretrained("gpt2")
+        self.token_embeddings = token_embeddings or GPT2LMHeadModel.from_pretrained("gpt2").transformer.wte.weight.detach().numpy()
+
 ```
 
 ### PerturbationStrategy and AttributionStrategy
@@ -242,7 +250,7 @@ This format is common across HuggingFace models.
 
 ## GPU Acceleration
 
-To run the attribution process on a device of your choice, pass the device identifier into the `Attributor` class constructor:
+To run the attribution process on a device of your choice (for local attribution), pass the device identifier into the `Attributor` class constructor:
 
 ```python
 attributor = Attributor(
