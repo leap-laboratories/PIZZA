@@ -105,7 +105,7 @@ class OpenAIAttributor(BaseLLMAttributor):
                 for token_id in unit_token_ids
             ]
             perturbed_input = self.tokenizer.decode(
-                left_token_ids + replacement_token_ids + right_token_ids
+                left_token_ids + replacement_token_ids + right_token_ids, skip_special_tokens=True
             )
 
             # Get the output logprobs for the perturbed input
@@ -145,7 +145,7 @@ class OpenAIAttributor(BaseLLMAttributor):
                                 j,
                                 attributed_tokens[j],
                                 attr_score.squeeze(),
-                                self.tokenizer.decode(replacement_token_ids),
+                                perturbed_input,
                                 perturbed_output.message.content,
                             )
             unit_offset += len(unit_tokens)
@@ -153,7 +153,7 @@ class OpenAIAttributor(BaseLLMAttributor):
         if logger:
             logger.log_perturbation(
                 i,
-                self.tokenizer.decode(replacement_token_ids)[0],
+                self.tokenizer.decode(replacement_token_ids, skip_special_tokens=True)[0],
                 perturbation_strategy,
                 input_text,
                 original_output.message.content,
