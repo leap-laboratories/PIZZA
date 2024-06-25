@@ -49,9 +49,9 @@ class APILLMAttributor(BaseLLMAttributor):
             token_embeddings or self.local_model.transformer.wte.weight.detach().numpy()
         )
 
-    def get_chat_completion(self, input: str) -> openai.types.chat.chat_completion.Choice:
+    def get_chat_completion(self, input: str, model_name=OPENAI_MODEL) -> openai.types.chat.chat_completion.Choice:
         response = self.openai_client.chat.completions.create(
-            model=OPENAI_MODEL,
+            model=model_name,
             messages=[{"role": "user", "content": input}],
             temperature=0.0,
             seed=0,
