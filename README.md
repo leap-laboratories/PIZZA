@@ -4,10 +4,10 @@ The LLM Attribution Library is designed to compute the contribution of each toke
 
 It can be used with both local LLMs:  
 
-![Local LLM Attribution Table](docs/assets/local-llm-attribution.png)
+![Local LLM Attribution Table](docs/assets/local-PIZZA.png)
 
 And OpenAI LLMs accessible through an API:  
-![API-accessible LLM Attribution Table](docs/assets/api-llm-attribution.png)
+![API-accessible LLM Attribution Table](docs/assets/api-PIZZA.png)
 
 ## Index  
 - [Quickstart](#quickstart)
@@ -96,13 +96,13 @@ This project uses [ruff](https://github.com/astral-sh/ruff) for linting and form
 1. First, clone the repository:
 
 ```bash
-git clone git@github.com:leap-laboratories/llm-attribution.git
+git clone git@github.com:leap-laboratories/PIZZA.git
 ```
 
 2. Navigate into the cloned directory:
 
 ```bash
-cd llm-attribution
+cd PIZZA
 ```
 
 3. Create a virtual environment and activate it:
