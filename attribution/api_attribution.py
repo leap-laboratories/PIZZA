@@ -1,5 +1,6 @@
 import os
 from typing import List, Optional
+from copy import deepcopy
 
 import numpy as np
 import openai
@@ -61,8 +62,10 @@ class OpenAIAttributor(BaseLLMAttributor):
         )
         logger: ExperimentLogger = kwargs.get("logger", None)
         perturb_word_wise: bool = kwargs.get("perturb_word_wise", False)
+        ignore_output_token_location: bool = kwargs.get("ignore_output_token_location", True)
 
         original_output = self.get_chat_completion(input_text)
+        remaining_output = deepcopy(original_output)
 
         if logger:
             logger.start_experiment(
@@ -111,6 +114,34 @@ class OpenAIAttributor(BaseLLMAttributor):
 
             # Get the output logprobs for the perturbed input
             perturbed_output = self.get_chat_completion(perturbed_input)
+
+
+            if ignore_output_token_location:
+
+                all_top_logprobs = []
+                all_toks = []
+                for ptl in perturbed_output.logprobs.content:
+                    all_top_logprobs.extend([tl.logprob for tl in ptl.top_logprobs])
+                    all_toks.extend([tl.token for tl in ptl.top_logprobs])
+
+                sorted_indexes = sorted(range(len(all_top_logprobs)), key=all_top_logprobs.__getitem__, reverse=True)
+                all_toks = [all_toks[s] for s in sorted_indexes]
+                all_top_logprobs = [all_top_logprobs[s] for s in sorted_indexes]
+
+                for otl in remaining_output.logprobs.content:
+                    if otl.token in all_toks:
+                        new_lp = all_top_logprobs[all_toks.index(otl.token)]
+                        
+                    else:
+                        new_lp = -100
+                    
+                    otl.logprob = new_lp
+                    for tl in otl.top_logprobs:
+                        if tl.token == otl.token:
+                            tl.logprob = new_lp
+
+                remaining_output.message.content = perturbed_output.message.content
+                perturbed_output = remaining_output
 
             for attribution_strategy in attribution_strategies:
                 attributed_tokens = [
