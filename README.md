@@ -83,7 +83,7 @@ attributor.print_attributions(
 )
 ```
 
-Usage examples can be found in the `examples/` and `research/` folders. There's also a colab-hosted quickstart notebook [here](https://colab.research.google.com/drive/1yf6izSzZg2K88QyaJwAwkZPPyLP4pPa-?usp=sharing).
+Usage examples can be found in the `examples/` folder. There's also a colab-hosted quickstart notebook [here](https://colab.research.google.com/drive/1yf6izSzZg2K88QyaJwAwkZPPyLP4pPa-?usp=sharing).
 
 ## Requirements
 
@@ -290,4 +290,4 @@ python -m pytest tests/integration
 ```
 
 ## Research 
-Some preliminary exploration and research into using attribution and quantitatively measuring attribution success can be found in the research folder of this repository. We'd be excited to see expansion of this small library, including both algorithmic improvements, further attribution and perturbation methods, and more rigorous and exhaustive experimentation. We welcome pull requests and issues from external collaborators.
+Some preliminary exploration and research into using attribution and quantitatively measuring attribution success can be found in the examples folder of this repository. We'd be excited to see expansion of this small library, including both algorithmic improvements, further attribution and perturbation methods, and more rigorous and exhaustive experimentation. We welcome pull requests and issues from external collaborators.
