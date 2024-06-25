@@ -75,7 +75,8 @@ class OpenAIAttributor(BaseLLMAttributor):
         # A unit is either a word or a single token, depending on the value of `perturb_word_wise`
         unit_offset = 0
         if perturb_word_wise:
-            words = input_text.split()
+            words = [' ' + w for w in input_text.split()]
+            words[0] = words[0][1:]
             tokens_per_unit = [self.tokenizer.tokenize(word) for word in words]
             token_ids_per_unit = [
                 self.tokenizer.encode(word, add_special_tokens=False) for word in words
