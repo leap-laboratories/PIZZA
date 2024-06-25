@@ -18,7 +18,7 @@ And OpenAI LLMs accessible through an API:
 - [API Design](#api-design)
   - [BaseLLMAttributor](#basellmattributor)
   - [LocalLLMAttributor](#localllmattributor)
-  - [APILLMAttributor](#apillmattributor)
+  - [OpenAIAttributor](#OpenAIAttributor)
   - [PerturbationStrategy and AttributionStrategy](#perturbationstrategy-and-attributionstrategy)
   - [ExperimentLogger](#experimentlogger)
 - [Limitations](#limitations)
@@ -58,11 +58,11 @@ attributor.print_attributions(
 Attrubution using GPT-3 via OpenAI's API:  
 
 ```python
-from attribution.api_attribution import APILLMAttributor
+from attribution.api_attribution import OpenAIAttributor
 from attribution.experiment_logger import ExperimentLogger
 from attribution.token_perturbation import NthNearestPerturbationStrategy
 
-attributor = APILLMAttributor()
+attributor = OpenAIAttributor()
 logger = ExperimentLogger()
 
 input_text = "The clock shows 9:47 PM. How many minutes 'til 10?"
@@ -183,9 +183,9 @@ A convenience method is provided to clean up memory used by Python and Torch. Th
 local_attributor.cleanup()
 ```
 
-### APILLMAttributor
+### OpenAIAttributor
 
-`APILLMAttributor` uses the OpenAI API to compute attributions. Given that gradients are not accessible, the attributor perturbs the input with a given `PerturbationStrategy` and measures the magnitude of change of the generated output with an `attribution_strategy`.
+`OpenAIAttributor` uses the OpenAI API to compute attributions. Given that gradients are not accessible, the attributor perturbs the input with a given `PerturbationStrategy` and measures the magnitude of change of the generated output with an `attribution_strategy`.
 
 The `compute_attributions` method:
 1. Sends a chat completion request to the OpenAI API.
@@ -194,7 +194,7 @@ The `compute_attributions` method:
 4. Logs attribution scores to an `ExperimentLogger` if passed.
 
 ```python
-class APILLMAttributor(BaseLLMAttributor):
+class OpenAIAttributor(BaseLLMAttributor):
     def __init__(
         self,
         model: Optional[PreTrainedModel] = None,

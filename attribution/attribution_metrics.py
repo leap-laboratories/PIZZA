@@ -4,7 +4,7 @@ from typing import List, Tuple
 import numpy as np
 import openai
 from sklearn.metrics.pairwise import cosine_similarity
-from transformers import PreTrainedModel, PreTrainedTokenizer
+from transformers import PreTrainedTokenizer
 
 
 def token_prob_difference(
@@ -83,26 +83,25 @@ def deprecated_max_logprob_difference(
 
 
 def get_sentence_embeddings(
-    sentence: str, model: PreTrainedModel, tokenizer: PreTrainedTokenizer
+    sentence: str, token_embeddings: np.ndarray, tokenizer: PreTrainedTokenizer
 ) -> Tuple[np.ndarray, np.ndarray]:
     inputs = tokenizer(sentence, return_tensors="pt")
-    embeddings = model.transformer.wte(inputs["input_ids"])  # Get the embeddings
-    embeddings = embeddings.detach().numpy().squeeze(axis=0)
+    embeddings = token_embeddings[inputs["input_ids"]].squeeze(axis=0)  
     return embeddings.mean(axis=0), embeddings
 
 
 def cosine_similarity_attribution(
     original_output_choice: openai.types.chat.chat_completion.Choice,
     perturbed_output_choice: openai.types.chat.chat_completion.Choice,
-    model: PreTrainedModel,
+    token_embeddings: np.ndarray,
     tokenizer: PreTrainedTokenizer,
 ) -> Tuple[float, np.ndarray]:
     # Extract embeddings
     initial_output_sentence_emb, initial_output_token_embs = get_sentence_embeddings(
-        original_output_choice.message.content, model, tokenizer
+        original_output_choice.message.content, token_embeddings, tokenizer
     )
     perturbed_output_sentence_emb, perturbed_output_token_embs = get_sentence_embeddings(
-        perturbed_output_choice.message.content, model, tokenizer
+        perturbed_output_choice.message.content, token_embeddings, tokenizer
     )
 
     # Reshape embeddings
