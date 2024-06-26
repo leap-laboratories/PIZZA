@@ -246,7 +246,7 @@ class ExperimentLogger:
             if "IPKernelApp" in get_ipython().config:
                 from IPython.display import display
 
-                display(matrix.style.background_gradient(cmap="YlOrRd"))
+                display(matrix.style.background_gradient(cmap="coolwarm", vmin=-1, vmax=1))
             else:
                 print(matrix)
 

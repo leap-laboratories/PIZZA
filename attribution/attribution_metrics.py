@@ -7,7 +7,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from transformers import PreTrainedTokenizer
 
 
-def token_prob_difference(
+def token_prob_attribution(
     initial_logprobs: openai.types.chat.chat_completion.ChoiceLogprobs,
     perturbed_logprobs: openai.types.chat.chat_completion.ChoiceLogprobs,
 ) -> Tuple[float, List[str], np.ndarray]:
@@ -33,40 +33,30 @@ def token_prob_difference(
             perturbed_token_logprobs_list[i] if i < len(perturbed_token_logprobs_list) else {}
         )
         perturbed_logprob = perturbed_token_logprobs.get(initial_token[0], NEAR_ZERO_PROB)
-        prob_difference_per_token[i] = abs(math.exp(initial_token[1]) - math.exp(perturbed_logprob))
+        prob_difference_per_token[i] = math.exp(initial_token[1]) - math.exp(perturbed_logprob)
 
     # Note: Different length outputs shift the mean upwards. This may or may not be desired behaviour.
     return prob_difference_per_token.mean(), initial_tokens, prob_difference_per_token
 
 
-def get_sentence_embeddings(
-    sentence: str, token_embeddings: np.ndarray, tokenizer: PreTrainedTokenizer
-) -> Tuple[np.ndarray, np.ndarray]:
-    
-    inputs = tokenizer.encode(sentence, return_tensors="pt", add_special_tokens=False)
-
-    embeddings = token_embeddings[inputs].squeeze(axis=0)  
-    return embeddings
-
-
 def cosine_similarity_attribution(
-    original_output_choice: openai.types.chat.chat_completion.Choice,
-    perturbed_output_choice: openai.types.chat.chat_completion.Choice,
+    original_output_str: str,
+    perturbed_output_str: str,
     token_embeddings: np.ndarray,
     tokenizer: PreTrainedTokenizer,
 ) -> Tuple[float, np.ndarray]:
     # Extract embeddings
-    original_output_emb = get_sentence_embeddings(
-        original_output_choice.message.content, token_embeddings, tokenizer
-    )
-    perturbed_output_emb = get_sentence_embeddings(
-        perturbed_output_choice.message.content, token_embeddings, tokenizer
-    )
 
-    cd = 1-(cosine_similarity(original_output_emb, perturbed_output_emb) + 1)/2
-    token_distance = cd.min(axis=-1)
-    sentence_distance = token_distance.mean()
-    return sentence_distance, token_distance
+    original_token_ix = tokenizer.encode(original_output_str, return_tensors="pt", add_special_tokens=False)
+    perturbed_token_ix = tokenizer.encode(perturbed_output_str, return_tensors="pt", add_special_tokens=False)
+    initial_tokens = [tokenizer.decode(t) for t in original_token_ix.squeeze(axis=0)]
+
+    original_output_emb = token_embeddings[original_token_ix].squeeze(axis=0)
+    perturbed_output_emb = token_embeddings[perturbed_token_ix].squeeze(axis=0)
+
+    cd = 1-cosine_similarity(original_output_emb, perturbed_output_emb)
+    token_distance = cd.min(axis=-1)    
+    return token_distance.mean(), initial_tokens, token_distance
 
 
 def _is_token_in_top_20(

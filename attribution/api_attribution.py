@@ -13,7 +13,7 @@ from transformers import (
 
 from .attribution_metrics import (
     cosine_similarity_attribution,
-    token_prob_difference,
+    token_prob_attribution,
 )
 from .base import BaseLLMAttributor
 from .experiment_logger import ExperimentLogger
@@ -147,22 +147,16 @@ class OpenAIAttributor(BaseLLMAttributor):
                     token_logprob.token for token_logprob in original_output.logprobs.content
                 ]
                 if attribution_strategy == "cosine":
-                    sentence_attr, token_attributions = cosine_similarity_attribution(
-                        original_output, perturbed_output, self.token_embeddings, self.tokenizer
+                    sentence_attr, attributed_tokens, token_attributions = cosine_similarity_attribution(
+                        original_output.message.content, perturbed_output.message.content, self.token_embeddings, self.tokenizer
                     )
                 elif attribution_strategy == "prob_diff":
-                    sentence_attr, attributed_tokens, token_attributions = token_prob_difference(
+                    sentence_attr, attributed_tokens, token_attributions = token_prob_attribution(
                         original_output.logprobs, perturbed_output.logprobs
                     )
                 else:
                     raise ValueError(f"Unknown attribution strategy: {attribution_strategy}")
                 
-                print(attributed_tokens)
-                print(sentence_attr)
-                print(token_attributions)
-                print(token_attributions.shape)
-                return
-
                 if logger:
                     for i, unit_token in enumerate(unit_tokens):
                         logger.log_input_token_attribution(
