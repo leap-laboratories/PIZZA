@@ -87,7 +87,7 @@ def get_sentence_embeddings(
 ) -> Tuple[np.ndarray, np.ndarray]:
     inputs = tokenizer(sentence, return_tensors="pt")
     embeddings = token_embeddings[inputs["input_ids"]].squeeze(axis=0)  
-    return embeddings.mean(axis=0), embeddings
+    return embeddings
 
 
 def cosine_similarity_attribution(
@@ -97,40 +97,17 @@ def cosine_similarity_attribution(
     tokenizer: PreTrainedTokenizer,
 ) -> Tuple[float, np.ndarray]:
     # Extract embeddings
-    initial_output_sentence_emb, initial_output_token_embs = get_sentence_embeddings(
+    original_output_emb = get_sentence_embeddings(
         original_output_choice.message.content, token_embeddings, tokenizer
     )
-    perturbed_output_sentence_emb, perturbed_output_token_embs = get_sentence_embeddings(
+    perturbed_output_emb = get_sentence_embeddings(
         perturbed_output_choice.message.content, token_embeddings, tokenizer
     )
 
-    # Reshape embeddings
-    initial_output_sentence_emb = initial_output_sentence_emb.reshape(1, -1)
-    perturbed_output_sentence_emb = perturbed_output_sentence_emb.reshape(1, -1)
-
-    # Calculate similarities
-    self_similarity = float(
-        cosine_similarity(initial_output_sentence_emb, initial_output_sentence_emb)
-    )
-    sentence_similarity = float(
-        cosine_similarity(initial_output_sentence_emb, perturbed_output_sentence_emb)
-    )
-
-    # Calculate token similarities for shared length
-    shared_length = min(initial_output_token_embs.shape[0], perturbed_output_token_embs.shape[0])
-    token_similarities_shared = cosine_similarity(
-        initial_output_token_embs[:shared_length],
-        perturbed_output_token_embs[:shared_length],
-    ).diagonal()
-
-    # Pad token similarities to match initial token embeddings shape
-    token_similarities = np.pad(
-        token_similarities_shared,
-        (0, initial_output_token_embs.shape[0] - shared_length),
-    )
-
-    # Return difference in sentence similarity and token similarities
-    return self_similarity - sentence_similarity, 1 - token_similarities
+    cd = 1-(cosine_similarity(original_output_emb, perturbed_output_emb) + 1)/2
+    token_distance = cd.min(axis=-1)
+    sentence_distance = token_distance.mean()
+    return sentence_distance, token_distance
 
 
 def _is_token_in_top_20(
