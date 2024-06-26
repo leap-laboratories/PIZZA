@@ -48,7 +48,7 @@ input_text = "The clock shows 9:47 PM. How many minutes 'til 10?"
 attributor.compute_attributions(
     input_text,
     perturbation_strategy=NthNearestPerturbationStrategy(n=-1),
-    attribution_strategies=["cosine", "prob_diff", "token_displacement"],
+    attribution_strategies=["cosine", "prob_diff"],
     logger=logger,
     perturb_word_wise=True,
 )
@@ -218,7 +218,7 @@ class OpenAIAttributor(BaseLLMAttributor):
 
 `PerturbationStrategy` is an abstract base class that defines the interface for all perturbation strategies. It declares the `get_replacement_token` method, which must be implemented by any concrete perturbation strategy class. This method takes a token id and returns a replacement token id.
 
-The `attribution_strategy` parameter is a string that specifies the method to use for computing attributions. The available strategies are "cosine", "prob_diff", and "token_displacement".
+The `attribution_strategy` parameter is a string that specifies the method to use for computing attributions. The available strategies are "cosine" and "prob_diff".
 
 - **Cosine Similarity Attribution**: Measures the cosine similarity between the embeddings of the original and perturbed outputs. The embeddings are obtained from a pre-trained model (e.g. GPT2). The cosine similarity is calculated for each pair of tokens in the same position on the original and perturbed outputs. For example, it compares the token in position 0 in the original response to the token in position 0 in the perturbed response. Additionally, the cosine similarity of the entire sentence embeddings is computed. The difference in sentence similarity and token similarities are returned.
 

@@ -39,54 +39,13 @@ def token_prob_difference(
     return prob_difference_per_token.mean(), initial_tokens, prob_difference_per_token
 
 
-def token_displacement(
-    initial_logprobs: openai.types.chat.chat_completion.ChoiceLogprobs,
-    perturbed_logprobs: openai.types.chat.chat_completion.ChoiceLogprobs,
-) -> Tuple[float, List[str], np.ndarray]:
-    initial_tokens = [content.token for content in initial_logprobs.content]
-    perturbed_top_tokens = [
-        [top_logprob.token for top_logprob in token_content.top_logprobs]
-        for token_content in perturbed_logprobs.content
-    ]
-
-    # Token displacement for each initially predicted token
-    displacement_per_token = np.zeros(len(initial_tokens))
-    MAX_TOKEN_DISPLACEMENT = 20
-    for i, token in enumerate(initial_tokens):
-        if i < len(perturbed_top_tokens) and token in perturbed_top_tokens[i]:
-            displacement_per_token[i] = perturbed_top_tokens[i].index(token)
-        else:
-            displacement_per_token[i] = MAX_TOKEN_DISPLACEMENT  # TODO: Revise
-
-    return displacement_per_token.mean(), initial_tokens, displacement_per_token
-
-
-# NOTE: this metric does not work. It's left to serve as discussion
-def deprecated_max_logprob_difference(
-    initial_logprobs: openai.types.chat.chat_completion.ChoiceLogprobs,
-    perturbed_logprobs: openai.types.chat.chat_completion.ChoiceLogprobs,
-):
-    # Get the logprobs of the top 20 tokens for the initial and perturbed outputs
-    # Warning: this should probably be a list with the top logprobs at each token position instead
-    initial_top_logprobs = {logprob.token: logprob.logprob for logprob in initial_logprobs.content}
-    perturbed_top_logprobs = {
-        logprob.token: logprob.logprob for logprob in perturbed_logprobs.content
-    }
-
-    # Calculate the maximum difference in logprobs
-    max_difference = 0
-    for token, initial_logprob in initial_top_logprobs.items():
-        perturbed_logprob = perturbed_top_logprobs.get(token, 0)
-        max_difference = max(max_difference, abs(initial_logprob - perturbed_logprob))
-
-    return max_difference
-
-
 def get_sentence_embeddings(
     sentence: str, token_embeddings: np.ndarray, tokenizer: PreTrainedTokenizer
 ) -> Tuple[np.ndarray, np.ndarray]:
-    inputs = tokenizer(sentence, return_tensors="pt")
-    embeddings = token_embeddings[inputs["input_ids"]].squeeze(axis=0)  
+    
+    inputs = tokenizer.encode(sentence, return_tensors="pt", add_special_tokens=False)
+
+    embeddings = token_embeddings[inputs].squeeze(axis=0)  
     return embeddings
 
 

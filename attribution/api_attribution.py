@@ -13,7 +13,6 @@ from transformers import (
 
 from .attribution_metrics import (
     cosine_similarity_attribution,
-    token_displacement,
     token_prob_difference,
 )
 from .base import BaseLLMAttributor
@@ -58,7 +57,7 @@ class OpenAIAttributor(BaseLLMAttributor):
             "perturbation_strategy", FixedPerturbationStrategy()
         )
         attribution_strategies: List[str] = kwargs.get(
-            "attribution_strategies", ["cosine", "prob_diff", "token_displacement"]
+            "attribution_strategies", ["cosine", "prob_diff"]
         )
         logger: ExperimentLogger = kwargs.get("logger", None)
         perturb_word_wise: bool = kwargs.get("perturb_word_wise", False)
@@ -155,12 +154,14 @@ class OpenAIAttributor(BaseLLMAttributor):
                     sentence_attr, attributed_tokens, token_attributions = token_prob_difference(
                         original_output.logprobs, perturbed_output.logprobs
                     )
-                elif attribution_strategy == "token_displacement":
-                    sentence_attr, attributed_tokens, token_attributions = token_displacement(
-                        original_output.logprobs, perturbed_output.logprobs
-                    )
                 else:
                     raise ValueError(f"Unknown attribution strategy: {attribution_strategy}")
+                
+                print(attributed_tokens)
+                print(sentence_attr)
+                print(token_attributions)
+                print(token_attributions.shape)
+                return
 
                 if logger:
                     for i, unit_token in enumerate(unit_tokens):
