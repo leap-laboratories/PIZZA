@@ -51,8 +51,8 @@ def cosine_similarity_attribution(
     perturbed_token_ix = tokenizer.encode(perturbed_output_str, return_tensors="pt", add_special_tokens=False)
     initial_tokens = [tokenizer.decode(t) for t in original_token_ix.squeeze(axis=0)]
 
-    original_output_emb = token_embeddings[original_token_ix].squeeze(axis=0)
-    perturbed_output_emb = token_embeddings[perturbed_token_ix].squeeze(axis=0)
+    original_output_emb = token_embeddings[original_token_ix].reshape(-1, token_embeddings.shape[-1])
+    perturbed_output_emb = token_embeddings[perturbed_token_ix].reshape(-1, token_embeddings.shape[-1])
 
     cd = 1-cosine_similarity(original_output_emb, perturbed_output_emb)
     token_distance = cd.min(axis=-1)    
