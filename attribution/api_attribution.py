@@ -143,9 +143,6 @@ class OpenAIAttributor(BaseLLMAttributor):
                 perturbed_output = remaining_output
 
             for attribution_strategy in attribution_strategies:
-                attributed_tokens = [
-                    token_logprob.token for token_logprob in original_output.logprobs.content
-                ]
                 if attribution_strategy == "cosine":
                     sentence_attr, attributed_tokens, token_attributions = cosine_similarity_attribution(
                         original_output.message.content, perturbed_output.message.content, self.token_embeddings, self.tokenizer
