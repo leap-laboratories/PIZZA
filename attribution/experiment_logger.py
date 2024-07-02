@@ -243,7 +243,7 @@ class ExperimentLogger:
                 )
                 additional_columns = additional_columns[["replacement_token", "perturbed_output"]]
                 matrix = matrix.join(additional_columns)
-            if "IPKernelApp" in get_ipython().config:
+            if get_ipython() and "IPKernelApp" in get_ipython().config:
                 from IPython.display import display
 
                 display(matrix.style.background_gradient(cmap="YlOrRd"))
@@ -252,7 +252,7 @@ class ExperimentLogger:
 
     def pretty_print(self, df: pd.DataFrame):
         # Check if code is running in Jupyter notebook
-        if "IPKernelApp" in get_ipython().config:
+        if get_ipython() and "IPKernelApp" in get_ipython().config:
             from IPython.display import display
 
             display(df.style.set_properties(**{"white-space": "pre-wrap"}))
