@@ -6,6 +6,7 @@ from typing import List, Optional
 import numpy as np
 import openai
 from dotenv import load_dotenv
+from tqdm import tqdm
 from transformers import (
     GPT2LMHeadModel,
     GPT2Tokenizer,
@@ -33,16 +34,20 @@ class OpenAIAttributor(BaseLLMAttributor):
         openai_model: Optional[str] = None,
         tokenizer: Optional[PreTrainedTokenizer] = None,
         token_embeddings: Optional[np.ndarray] = None,
+        request_chunksize: Optional[int] = 1000,
     ):
         openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
         self.openai_client = openai.AsyncOpenAI(api_key=openai_api_key)
         self.openai_model = openai_model or "gpt-3.5-turbo"
 
         self.tokenizer = tokenizer or GPT2Tokenizer.from_pretrained("gpt2")
-        self.token_embeddings = token_embeddings or GPT2LMHeadModel.from_pretrained("gpt2").transformer.wte.weight.detach().numpy()
+        self.token_embeddings = (
+            token_embeddings
+            or GPT2LMHeadModel.from_pretrained("gpt2").transformer.wte.weight.detach().numpy()
+        )
+        self.request_chunksize = request_chunksize
 
     async def get_chat_completion(self, input: str) -> openai.types.chat.chat_completion.Choice:
-        
         response = await self.openai_client.chat.completions.create(
             model=self.openai_model,
             messages=[{"role": "user", "content": input}],
@@ -78,7 +83,7 @@ class OpenAIAttributor(BaseLLMAttributor):
         # A unit is either a word or a single token, depending on the value of `perturb_word_wise`
         unit_offset = 0
         if perturb_word_wise:
-            words = [' ' + w for w in input_text.split()]
+            words = [" " + w for w in input_text.split()]
             words[0] = words[0][1:]
             tokens_per_unit = [self.tokenizer.tokenize(word) for word in words]
             token_ids_per_unit = [
@@ -116,35 +121,45 @@ class OpenAIAttributor(BaseLLMAttributor):
 
             # Create task for the perturbed input
             tasks.append(asyncio.create_task(self.get_chat_completion(perturbed_input)))
-            perturbations.append({
-                "input": perturbed_input,
-                "unit_tokens": unit_tokens,
-                "replaced_token_ids": replacement_token_ids,
-            })
-        
+            perturbations.append(
+                {
+                    "input": perturbed_input,
+                    "unit_tokens": unit_tokens,
+                    "replaced_token_ids": replacement_token_ids,
+                }
+            )
+
         # Get the output logprobs for the perturbed inputs
-        outputs = await asyncio.gather(*tasks)
+        if self.request_chunksize is not None and len(tasks) > self.request_chunksize:
+            outputs = []
+            for idx in tqdm(range(0, len(tasks), self.request_chunksize), desc=f"Sending {self.request_chunksize:.0f} concurrent requests at a time"):
+                batch = [tasks[i] for i in range(idx, min(idx + self.request_chunksize, len(tasks)))]
+                outputs.extend(await asyncio.gather(*batch))
+                await asyncio.sleep(0.1)
+        else:
+            outputs = await asyncio.gather(*tasks)
 
         for perturbation, perturbed_output in zip(perturbations, outputs):
             if ignore_output_token_location:
-
                 all_top_logprobs = []
                 all_toks = []
                 for ptl in perturbed_output.logprobs.content:
                     all_top_logprobs.extend([tl.logprob for tl in ptl.top_logprobs])
                     all_toks.extend([tl.token for tl in ptl.top_logprobs])
 
-                sorted_indexes = sorted(range(len(all_top_logprobs)), key=all_top_logprobs.__getitem__, reverse=True)
+                sorted_indexes = sorted(
+                    range(len(all_top_logprobs)), key=all_top_logprobs.__getitem__, reverse=True
+                )
                 all_toks = [all_toks[s] for s in sorted_indexes]
                 all_top_logprobs = [all_top_logprobs[s] for s in sorted_indexes]
 
                 for otl in remaining_output.logprobs.content:
                     if otl.token in all_toks:
                         new_lp = all_top_logprobs[all_toks.index(otl.token)]
-                        
+
                     else:
                         new_lp = -100
-                    
+
                     otl.logprob = new_lp
                     for tl in otl.top_logprobs:
                         if tl.token == otl.token:
@@ -155,8 +170,13 @@ class OpenAIAttributor(BaseLLMAttributor):
 
             for attribution_strategy in attribution_strategies:
                 if attribution_strategy == "cosine":
-                    sentence_attr, attributed_tokens, token_attributions = cosine_similarity_attribution(
-                        original_output.message.content, perturbed_output.message.content, self.token_embeddings, self.tokenizer
+                    sentence_attr, attributed_tokens, token_attributions = (
+                        cosine_similarity_attribution(
+                            original_output.message.content,
+                            perturbed_output.message.content,
+                            self.token_embeddings,
+                            self.tokenizer,
+                        )
                     )
                 elif attribution_strategy == "prob_diff":
                     sentence_attr, attributed_tokens, token_attributions = token_prob_attribution(
@@ -164,7 +184,7 @@ class OpenAIAttributor(BaseLLMAttributor):
                     )
                 else:
                     raise ValueError(f"Unknown attribution strategy: {attribution_strategy}")
-                
+
                 if logger:
                     for i, unit_token in enumerate(unit_tokens):
                         logger.log_input_token_attribution(
@@ -188,7 +208,9 @@ class OpenAIAttributor(BaseLLMAttributor):
         if logger:
             logger.log_perturbation(
                 i,
-                self.tokenizer.decode(perturbation["replaced_token_ids"], skip_special_tokens=True)[0],
+                self.tokenizer.decode(perturbation["replaced_token_ids"], skip_special_tokens=True)[
+                    0
+                ],
                 perturbation_strategy,
                 input_text,
                 original_output.message.content,
