@@ -212,7 +212,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                     raise ValueError(f"Unknown attribution strategy: {attribution_strategy}")
 
                 if logger:
-                    for i, unit_token in enumerate(unit_tokens):
+                    for i, unit_token in enumerate(perturbation["unit_tokens"]):
                         logger.log_input_token_attribution(
                             attribution_strategy,
                             unit_offset + i,
@@ -229,7 +229,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                                 perturbation["input"],
                                 perturbed_output.message.content,
                             )
-            unit_offset += len(unit_tokens)
+            unit_offset += len(perturbation["unit_tokens"])
 
         if logger:
             logger.log_perturbation(
