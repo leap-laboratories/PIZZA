@@ -18,7 +18,7 @@ from .attribution_metrics import (
     cosine_similarity_attribution,
     token_prob_attribution,
 )
-from .base import BaseLLMAttributor
+from .base import BaseAsyncLLMAttributor
 from .experiment_logger import ExperimentLogger
 from .token_perturbation import (
     FixedPerturbationStrategy,
@@ -30,7 +30,7 @@ load_dotenv()
 DEFAULT_OPENAI_MODEL = "gpt-3.5-turbo"
 
 
-class OpenAIAttributor(BaseLLMAttributor):
+class OpenAIAttributor(BaseAsyncLLMAttributor):
     def __init__(
         self,
         openai_api_key: Optional[str] = None,
