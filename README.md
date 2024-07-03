@@ -8,32 +8,35 @@ It can be used with OpenAI LLMs accessible through an API:
 and local LLMs:
 ![Local LLM Attribution Table](docs/assets/local-PIZZA.png)
 
-And 
 ## Index  
-- [Quickstart](#quickstart)
-- [Requirements](#requirements)
-  - [Packaging](#packaging)
-  - [Linting](#linting)
-- [Installation](#installation)
-- [API Design](#api-design)
-  - [BaseLLMAttributor](#basellmattributor)
-  - [LocalLLMAttributor](#localllmattributor)
-  - [OpenAIAttributor](#OpenAIAttributor)
-  - [PerturbationStrategy and AttributionStrategy](#perturbationstrategy-and-attributionstrategy)
-  - [ExperimentLogger](#experimentlogger)
-- [Limitations](#limitations)
-  - [Batch dimensions](#batch-dimensions)
-  - [Input Embeddings](#input-embeddings)
-- [GPU Acceleration](#gpu-acceleration)
-- [Development](#development)
-- [Testing](#testing)
+- [LLM Attribution Library](#llm-attribution-library)
+  - [Index](#index)
+  - [Quickstart](#quickstart)
+  - [Requirements](#requirements)
+    - [Packaging](#packaging)
+    - [Linting](#linting)
+  - [Installation](#installation)
+  - [API Design](#api-design)
+    - [BaseLLMAttributor](#basellmattributor)
+    - [LocalLLMAttributor](#localllmattributor)
+      - [Cleaning Up](#cleaning-up)
+    - [OpenAIAttributor](#openaiattributor)
+    - [PerturbationStrategy and AttributionStrategy](#perturbationstrategy-and-attributionstrategy)
+    - [ExperimentLogger](#experimentlogger)
+  - [Limitations](#limitations)
+    - [Batch dimensions](#batch-dimensions)
+    - [Input Embeddings](#input-embeddings)
+  - [GPU Acceleration](#gpu-acceleration)
+  - [Development](#development)
+  - [Testing](#testing)
+  - [Research](#research)
 
 ## Quickstart
 
 
 Attrubution via OpenAI's API:  
 
-# !!! This will use API credits !!!
+**!!! This will use API credits !!!**
 
 ```python
 from attribution.api_attribution import OpenAIAttributor
@@ -83,7 +86,7 @@ attributor.print_attributions(
 )
 ```
 
-Usage examples can be found in the `examples/` folder. There's also a colab-hosted quickstart notebook [here](https://colab.research.google.com/drive/1yf6izSzZg2K88QyaJwAwkZPPyLP4pPa-?usp=sharing).
+Usage examples can be found in the `examples/` folder.
 
 ## Requirements
 
