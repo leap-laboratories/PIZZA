@@ -1,10 +1,10 @@
 # PIZZA
 
-[`P`rompt `I`nput `Z`onal `Z`? `A`ttribution analyzer](https://www.bmj.com/content/349/bmj.g7092)
+`P`rompt `I`nput `Z`onal `Z`? `A`ttribution analyzer
 
-PIZZA is an LLM Attribution Library designed to compute the contribution of each token in a prompt to the generated response of a language model.
+[PIZZA](https://www.bmj.com/content/349/bmj.g7092) is an LLM Attribution Library designed to compute the contribution of each token in a prompt to the generated response of a language model.
 
-It can be used with OpenAI LLMs accessible through an API:  
+It can be used with OpenAI LLMs accessible through an API:
 
 ![API-accessible LLM Attribution Table](docs/assets/api-PIZZA.png)
 
