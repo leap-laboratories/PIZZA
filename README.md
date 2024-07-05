@@ -1,16 +1,20 @@
-# LLM Attribution Library
+# PIZZA
 
-The LLM Attribution Library is designed to compute the contribution of each token in a prompt to the generated response of a language model.
+[`P`rompt `I`nput `Z`onal `Z`? `A`ttribution analyzer](https://www.bmj.com/content/349/bmj.g7092)
+
+PIZZA is an LLM Attribution Library designed to compute the contribution of each token in a prompt to the generated response of a language model.
 
 It can be used with OpenAI LLMs accessible through an API:  
+
 ![API-accessible LLM Attribution Table](docs/assets/api-PIZZA.png)
 
 and local LLMs:
+
 ![Local LLM Attribution Table](docs/assets/local-PIZZA.png)
 
 ## Index
 
-- [LLM Attribution Library](#llm-attribution-library)
+- [PIZZA](#pizza)
   - [Index](#index)
   - [Quickstart](#quickstart)
   - [Requirements](#requirements)
