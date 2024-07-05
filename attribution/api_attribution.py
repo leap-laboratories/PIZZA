@@ -32,19 +32,21 @@ class OpenAIAttributor(BaseLLMAttributor):
     def __init__(
         self,
         openai_api_key: Optional[str] = None,
-        openai_model: Optional[str] = None,
+        openai_model: Optional[str] = DEFAULT_OPENAI_MODEL,
         tokenizer: Optional[PreTrainedTokenizer] = None,
         token_embeddings: Optional[np.ndarray] = None,
     ):
         openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
         self.openai_client = openai.OpenAI(api_key=openai_api_key)
-        self.openai_model = openai_model or DEFAULT_OPENAI_MODEL
+        self.openai_model = openai_model
 
         self.tokenizer = tokenizer or GPT2Tokenizer.from_pretrained("gpt2")
-        self.token_embeddings = token_embeddings or GPT2LMHeadModel.from_pretrained("gpt2").transformer.wte.weight.detach().numpy()
+        self.token_embeddings = (
+            token_embeddings
+            or GPT2LMHeadModel.from_pretrained("gpt2").transformer.wte.weight.detach().numpy()
+        )
 
     def get_chat_completion(self, input: str) -> openai.types.chat.chat_completion.Choice:
-        
         response = self.openai_client.chat.completions.create(
             model=self.openai_model,
             messages=[{"role": "user", "content": input}],
@@ -54,7 +56,7 @@ class OpenAIAttributor(BaseLLMAttributor):
             top_logprobs=20,
         )
         return response.choices[0]
-    
+
     def make_output_location_invariant(self, original_output, perturbed_output):
         # Making a copy of the original output, so we can update it with the perturbed output log probs, wherever a token from the unperturned output is found in the perturbed output.
         location_invariant_output = deepcopy(original_output)
@@ -63,23 +65,31 @@ class OpenAIAttributor(BaseLLMAttributor):
         all_top_logprobs = []
         all_tokens = []
         for perturbed_token in perturbed_output.logprobs.content:
-            all_top_logprobs.extend([token_logprob.logprob for token_logprob in perturbed_token.top_logprobs])
-            all_tokens.extend([token_logprob.token for token_logprob in perturbed_token.top_logprobs])
+            all_top_logprobs.extend(
+                [token_logprob.logprob for token_logprob in perturbed_token.top_logprobs]
+            )
+            all_tokens.extend(
+                [token_logprob.token for token_logprob in perturbed_token.top_logprobs]
+            )
 
         # Sorting the tokens and logprobs by logprob in descending order. This is because .index gets the first occurence of a token in the list, and we want to get the highest logprob for each token.
-        sorted_indexes = sorted(range(len(all_top_logprobs)), key=all_top_logprobs.__getitem__, reverse=True)
+        sorted_indexes = sorted(
+            range(len(all_top_logprobs)), key=all_top_logprobs.__getitem__, reverse=True
+        )
         all_tokens_sorted = [all_tokens[s] for s in sorted_indexes]
         all_top_logprobs_sorted = [all_top_logprobs[s] for s in sorted_indexes]
 
         # Now, for each token in the original output, if it is found in the perturbed output , update the logprob in the original output with the logprob from the perturbed output.
         # Otherwise, set the logprob to a near zero value.
-        
+
         for unperturbed_token in location_invariant_output.logprobs.content:
             if unperturbed_token.token in all_tokens_sorted:
-                perturbed_logprob = all_top_logprobs_sorted[all_tokens_sorted.index(unperturbed_token.token)]
+                perturbed_logprob = all_top_logprobs_sorted[
+                    all_tokens_sorted.index(unperturbed_token.token)
+                ]
             else:
                 perturbed_logprob = NEAR_ZERO_PROB
-            
+
             # Update the main token logprob
             unperturbed_token.logprob = perturbed_logprob
 
@@ -91,9 +101,8 @@ class OpenAIAttributor(BaseLLMAttributor):
         # And update the message content
         location_invariant_output.message.content = perturbed_output.message.content
 
-        #Now the perturbed output contains the same tokens as the original output, but with the logprobs from the perturbed output.
+        # Now the perturbed output contains the same tokens as the original output, but with the logprobs from the perturbed output.
         return location_invariant_output
-
 
     def compute_attributions(self, input_text: str, **kwargs):
         perturbation_strategy: PerturbationStrategy = kwargs.get(
@@ -119,7 +128,7 @@ class OpenAIAttributor(BaseLLMAttributor):
         # A unit is either a word or a single token, depending on the value of `perturb_word_wise`
         unit_offset = 0
         if perturb_word_wise:
-            words = [' ' + w for w in input_text.split()]
+            words = [" " + w for w in input_text.split()]
             words[0] = words[0][1:]
             tokens_per_unit = [self.tokenizer.tokenize(word) for word in words]
             token_ids_per_unit = [
@@ -157,12 +166,19 @@ class OpenAIAttributor(BaseLLMAttributor):
             perturbed_output = self.get_chat_completion(perturbed_input)
 
             if ignore_output_token_location:
-                perturbed_output = self.make_output_location_invariant(original_output, perturbed_output)
-                
+                perturbed_output = self.make_output_location_invariant(
+                    original_output, perturbed_output
+                )
+
             for attribution_strategy in attribution_strategies:
                 if attribution_strategy == "cosine":
-                    sentence_attr, attributed_tokens, token_attributions = cosine_similarity_attribution(
-                        original_output.message.content, perturbed_output.message.content, self.token_embeddings, self.tokenizer
+                    sentence_attr, attributed_tokens, token_attributions = (
+                        cosine_similarity_attribution(
+                            original_output.message.content,
+                            perturbed_output.message.content,
+                            self.token_embeddings,
+                            self.tokenizer,
+                        )
                     )
                 elif attribution_strategy == "prob_diff":
                     sentence_attr, attributed_tokens, token_attributions = token_prob_attribution(
@@ -170,7 +186,7 @@ class OpenAIAttributor(BaseLLMAttributor):
                     )
                 else:
                     raise ValueError(f"Unknown attribution strategy: {attribution_strategy}")
-                
+
                 if logger:
                     for i, unit_token in enumerate(unit_tokens):
                         logger.log_input_token_attribution(
