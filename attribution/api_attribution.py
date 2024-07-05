@@ -1,6 +1,7 @@
 import asyncio
 import itertools
 import os
+import statistics
 from copy import deepcopy
 from typing import Any, List, Optional
 
@@ -166,9 +167,13 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         
         return perturbations
 
-    async def hierarchical_perturbation(self, input_text: str, init_chunksize: int, stages: int, **kwargs):
+    async def hierarchical_perturbation(self, input_text: str, init_chunksize: int, stages: int, threshold: float = 0.5, **kwargs):
         perturbation_strategy: PerturbationStrategy = kwargs.get(
             "perturbation_strategy", FixedPerturbationStrategy()
+        )
+
+        attribution_strategies: List[str] = kwargs.get(
+            "attribution_strategies", ["cosine", "prob_diff"]
         )
 
         logger: ExperimentLogger = kwargs.get("logger", None)
@@ -189,21 +194,25 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         process_chunks = None
         prev_perturbations = None
         prev_process_chunks = None
-        all_scores = []
+        total_llm_calls = 0
         for stage in range(stages):
             
             perturbations = self.get_perturbations(input_text, chunksize, **kwargs)
 
             if stage > 0:
-                process_chunks = []
-                for p, processed in zip(prev_perturbations, prev_process_chunks):
+                scores = []
+                for perturbation, processed in zip(prev_perturbations, prev_process_chunks):
                     if processed:
-                        score = chunk_scores.pop(0)
-                        decision = score["cosine"]["sentence_attribution"] > 0.5
+                        attr = chunk_scores.pop(0)
+                        scores.append(attr[attribution_strategies[0]]["sentence_attribution"])
                     else:
-                        decision = False
+                        scores.append(None)
                     
-                    process_chunks.extend([decision] * (2 if chunksize > 1 else len(p["unit_tokens"])))
+                process_chunks = []
+                median_score = statistics.median([s for s in scores if s is not None])
+                for score in scores:
+                    decision = score is not None and (score > threshold or score > median_score) 
+                    process_chunks.extend([decision] * (2 if chunksize > 1 else len(perturbation["unit_tokens"])))
             else:
                 process_chunks = [True] * len(perturbations)
 
@@ -215,12 +224,12 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             outputs = await self.compute_attribution_chunks(perturbations, **kwargs)
             chunk_scores = self.get_scores(outputs, original_output, **kwargs)
 
+            total_llm_calls += len(outputs)
             prev_process_chunks = process_chunks
 
-
             if logger:
-                for p, output, score in zip(perturbations, outputs, chunk_scores):
-                    for unit_token, token_id in zip(p["unit_tokens"], p["token_idx"]):
+                for perturbation, output, score in zip(perturbations, outputs, chunk_scores):
+                    for unit_token, token_id in zip(perturbation["unit_tokens"], perturbation["token_idx"]):
 
                         for attribution_strategy, attr_result in score.items():
                             
@@ -237,22 +246,21 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                                     j,
                                     attr_result["attributed_tokens"][j],
                                     attr_score.squeeze(),
-                                    p["input"],
+                                    perturbation["input"],
                                     output.message.content,
                                 )
 
                 logger.log_perturbation(
                     0, # TODO: Why is this here?
-                    self.tokenizer.decode(p["replaced_token_ids"], skip_special_tokens=True)[
+                    self.tokenizer.decode(perturbation["replaced_token_ids"], skip_special_tokens=True)[
                         0
                     ],
                     perturbation_strategy,
                     input_text,
                     original_output.message.content,
-                    p["input"],
+                    perturbation["input"],
                     output.message.content,
                 )
-                logger.stop_experiment()
 
             if stage == stages - 2:
                 chunksize = 1
@@ -261,10 +269,9 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                 if chunksize == 0:
                     break
 
-        logger.df_token_attribution_matrix = logger.df_token_attribution_matrix.drop_duplicates(subset="input_token_pos", keep="last").sort_values(by="input_token_pos")
-        logger.df_input_token_attribution = logger.df_input_token_attribution.drop_duplicates(subset="input_token_pos", keep="last").sort_values(by="input_token_pos")
-
-        return all_scores
+        logger.df_token_attribution_matrix = logger.df_token_attribution_matrix.drop_duplicates(subset=["input_token_pos", "output_token"], keep="last").sort_values(by="input_token_pos")
+        logger.df_input_token_attribution = logger.df_input_token_attribution.drop_duplicates(subset=["input_token_pos"], keep="last").sort_values(by="input_token_pos")
+        logger.stop_experiment(num_llm_calls=total_llm_calls)
 
     def get_scores(self, perturbed_output, original_output, **kwargs):
         attribution_strategies: List[str] = kwargs.get(
@@ -489,4 +496,4 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                 perturbation["input"],
                 perturbed_output.message.content,
             )
-            logger.stop_experiment()
+            logger.stop_experiment(num_llm_calls=len(outputs))

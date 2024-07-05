@@ -20,6 +20,7 @@ class ExperimentLogger:
                 "perturbation_strategy",
                 "perturb_word_wise",
                 "duration",
+                "num_llm_calls",
             ]
         )
         self.df_input_token_attribution = pd.DataFrame(
@@ -72,11 +73,15 @@ class ExperimentLogger:
             "perturbation_strategy": str(perturbation_strategy),
             "perturb_word_wise": perturb_word_wise,
             "duration": None,
+            "num_llm_calls": None,
         }
 
-    def stop_experiment(self):
+    def stop_experiment(self, num_llm_calls: Optional[int] = None):
         self.df_experiments.loc[len(self.df_experiments) - 1, "duration"] = (
             time.time() - self.experiment_start_time
+        )
+        self.df_experiments.loc[len(self.df_experiments) - 1, "num_llm_calls"] = (
+            num_llm_calls
         )
 
     def log_input_token_attribution(
