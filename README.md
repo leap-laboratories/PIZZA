@@ -199,23 +199,13 @@ The `compute_attributions` method:
 3. Uses an `attribution_strategy` to compute the magnitude of change between the original and perturbed output.
 4. Logs attribution scores to an `ExperimentLogger` if passed.
 
-```python
-class OpenAIAttributor(BaseLLMAttributor):
-    def __init__(
-        self,
-        openai_api_key: Optional[str] = None,
-        openai_model: Optional[str] = None,
-        tokenizer: Optional[PreTrainedTokenizer] = None,
-        token_embeddings: Optional[np.ndarray] = None,
-    ):
-        openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
-        self.openai_client = openai.OpenAI(api_key=openai_api_key)
-        self.openai_model = openai_model or "gpt-3.5-turbo"
+**Initialization Parameters:**
 
-        self.tokenizer = tokenizer or GPT2Tokenizer.from_pretrained("gpt2")
-        self.token_embeddings = token_embeddings or GPT2LMHeadModel.from_pretrained("gpt2").transformer.wte.weight.detach().numpy()
-
-```
+- `openai_api_key` (`Optional[str]`): Your OpenAI API key. If not provided, the class attempts to retrieve the API key from the `OPENAI_API_KEY` environment variable.
+- `openai_model` (`Optional[str]`): The identifier for the OpenAI model you wish to use. If not specified, a default model is used. This allows for flexibility in choosing between different models for different tasks or preferences.
+  - Default: gpt-3.5-turbo
+- `tokenizer` (`Optional[PreTrainedTokenizer]`): An instance of a tokenizer compatible with the chosen model. If not provided, the class defaults to using the `GPT2Tokenizer` with the "gpt2" model, suitable for general-purpose text processing.
+- `token_embeddings` (`Optional[np.ndarray]`): Pre-computed embeddings for tokens. If not provided, the class will default to using embeddings from the `GPT2LMHeadModel` for the "gpt2" model. This is useful for advanced use cases where custom or pre-computed embeddings are desired.
 
 ### PerturbationStrategy and AttributionStrategy
 
