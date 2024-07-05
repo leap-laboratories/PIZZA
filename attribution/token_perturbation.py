@@ -11,7 +11,7 @@ class PerturbationStrategy:
 
 
 class FixedPerturbationStrategy(PerturbationStrategy):
-    def __init__(self, replacement_token=" ", tokenizer: Optional[PreTrainedTokenizer] = None):
+    def __init__(self, replacement_token="", tokenizer: Optional[PreTrainedTokenizer] = None):
         self.replacement_token = replacement_token
         self.tokenizer = tokenizer or GPT2Tokenizer.from_pretrained("gpt2", add_prefix_space=True)
 

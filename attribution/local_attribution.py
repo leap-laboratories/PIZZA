@@ -79,7 +79,7 @@ class LocalLLMAttributor:
             # Get actual next tokens using standard sampling of model
             gen_tokens, next_token_id = self._generate_tokens(self.model, token_ids)
 
-            logging.info(f"{self.tokenizer.decode(gen_tokens[0])}")
+            logging.info(f"{self.tokenizer.decode(gen_tokens[0], skip_special_tokens=True)}")
 
             # Given the output logits and the next token, compute the gradients for this token with respect to the input embeddings
             grad = self._get_gradients(output, next_token_id, input_embeddings)

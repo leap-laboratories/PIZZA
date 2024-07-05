@@ -39,7 +39,7 @@ class ExperimentLogger:
                 "output_token_pos",
                 "output_token",
                 "attr_score",
-                "replacement_token",
+                "perturbed_input",
                 "perturbed_output",
             ]
         )
@@ -101,7 +101,7 @@ class ExperimentLogger:
         output_token_pos: int,
         output_token: str,
         attr_score: float,
-        replacement_token: str,
+        perturbed_input: str,
         perturbed_output: str,
     ):
         self.df_token_attribution_matrix.loc[len(self.df_token_attribution_matrix)] = {
@@ -111,7 +111,7 @@ class ExperimentLogger:
             "output_token_pos": output_token_pos,
             "output_token": output_token,
             "attr_score": attr_score,
-            "replacement_token": replacement_token,
+            "perturbed_input": perturbed_input,
             "perturbed_output": perturbed_output,
         }
 
@@ -234,19 +234,19 @@ class ExperimentLogger:
 
             if show_debug_cols:
                 additional_columns = exp_data[
-                    ["input_token_pos", "replacement_token", "perturbed_output"]
+                    ["input_token_pos", "perturbed_input", "perturbed_output"]
                 ].drop_duplicates()
                 additional_columns = additional_columns.set_index(
                     additional_columns["input_token_pos"].apply(
                         lambda x: f"{input_tokens[x]} ({x})"
                     )
                 )
-                additional_columns = additional_columns[["replacement_token", "perturbed_output"]]
+                additional_columns = additional_columns[["perturbed_input", "perturbed_output"]]
                 matrix = matrix.join(additional_columns)
             if get_ipython() and "IPKernelApp" in get_ipython().config:
                 from IPython.display import display
 
-                display(matrix.style.background_gradient(cmap="YlOrRd"))
+                display(matrix.style.background_gradient(cmap="coolwarm", vmin=-1, vmax=1))
             else:
                 print(matrix)
 

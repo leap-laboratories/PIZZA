@@ -4,10 +4,11 @@ from typing import List, Tuple
 import numpy as np
 import openai
 from sklearn.metrics.pairwise import cosine_similarity
-from transformers import PreTrainedModel, PreTrainedTokenizer
+from transformers import PreTrainedTokenizer
 
+NEAR_ZERO_PROB = -100  # Logprob constant for near zero probability
 
-def token_prob_difference(
+def token_prob_attribution(
     initial_logprobs: openai.types.chat.chat_completion.ChoiceLogprobs,
     perturbed_logprobs: openai.types.chat.chat_completion.ChoiceLogprobs,
 ) -> Tuple[float, List[str], np.ndarray]:
@@ -25,7 +26,6 @@ def token_prob_difference(
 
     # Probability change for each input token
     prob_difference_per_token = np.zeros(len(initial_tokens))
-    NEAR_ZERO_PROB = -100  # Logprob constant for near zero probability
 
     # Calculate the absolute difference in probabilities for each token
     for i, initial_token in enumerate(initial_token_logprobs):
@@ -33,105 +33,30 @@ def token_prob_difference(
             perturbed_token_logprobs_list[i] if i < len(perturbed_token_logprobs_list) else {}
         )
         perturbed_logprob = perturbed_token_logprobs.get(initial_token[0], NEAR_ZERO_PROB)
-        prob_difference_per_token[i] = abs(math.exp(initial_token[1]) - math.exp(perturbed_logprob))
+        prob_difference_per_token[i] = math.exp(initial_token[1]) - math.exp(perturbed_logprob)
 
     # Note: Different length outputs shift the mean upwards. This may or may not be desired behaviour.
     return prob_difference_per_token.mean(), initial_tokens, prob_difference_per_token
 
 
-def token_displacement(
-    initial_logprobs: openai.types.chat.chat_completion.ChoiceLogprobs,
-    perturbed_logprobs: openai.types.chat.chat_completion.ChoiceLogprobs,
-) -> Tuple[float, List[str], np.ndarray]:
-    initial_tokens = [content.token for content in initial_logprobs.content]
-    perturbed_top_tokens = [
-        [top_logprob.token for top_logprob in token_content.top_logprobs]
-        for token_content in perturbed_logprobs.content
-    ]
-
-    # Token displacement for each initially predicted token
-    displacement_per_token = np.zeros(len(initial_tokens))
-    MAX_TOKEN_DISPLACEMENT = 20
-    for i, token in enumerate(initial_tokens):
-        if i < len(perturbed_top_tokens) and token in perturbed_top_tokens[i]:
-            displacement_per_token[i] = perturbed_top_tokens[i].index(token)
-        else:
-            displacement_per_token[i] = MAX_TOKEN_DISPLACEMENT  # TODO: Revise
-
-    return displacement_per_token.mean(), initial_tokens, displacement_per_token
-
-
-# NOTE: this metric does not work. It's left to serve as discussion
-def deprecated_max_logprob_difference(
-    initial_logprobs: openai.types.chat.chat_completion.ChoiceLogprobs,
-    perturbed_logprobs: openai.types.chat.chat_completion.ChoiceLogprobs,
-):
-    # Get the logprobs of the top 20 tokens for the initial and perturbed outputs
-    # Warning: this should probably be a list with the top logprobs at each token position instead
-    initial_top_logprobs = {logprob.token: logprob.logprob for logprob in initial_logprobs.content}
-    perturbed_top_logprobs = {
-        logprob.token: logprob.logprob for logprob in perturbed_logprobs.content
-    }
-
-    # Calculate the maximum difference in logprobs
-    max_difference = 0
-    for token, initial_logprob in initial_top_logprobs.items():
-        perturbed_logprob = perturbed_top_logprobs.get(token, 0)
-        max_difference = max(max_difference, abs(initial_logprob - perturbed_logprob))
-
-    return max_difference
-
-
-def get_sentence_embeddings(
-    sentence: str, model: PreTrainedModel, tokenizer: PreTrainedTokenizer
-) -> Tuple[np.ndarray, np.ndarray]:
-    inputs = tokenizer(sentence, return_tensors="pt")
-    embeddings = model.transformer.wte(inputs["input_ids"])  # Get the embeddings
-    embeddings = embeddings.detach().numpy().squeeze(axis=0)
-    return embeddings.mean(axis=0), embeddings
-
-
 def cosine_similarity_attribution(
-    original_output_choice: openai.types.chat.chat_completion.Choice,
-    perturbed_output_choice: openai.types.chat.chat_completion.Choice,
-    model: PreTrainedModel,
+    original_output_str: str,
+    perturbed_output_str: str,
+    token_embeddings: np.ndarray,
     tokenizer: PreTrainedTokenizer,
-) -> Tuple[float, np.ndarray]:
+) -> Tuple[float, list[str], np.ndarray]:
     # Extract embeddings
-    initial_output_sentence_emb, initial_output_token_embs = get_sentence_embeddings(
-        original_output_choice.message.content, model, tokenizer
-    )
-    perturbed_output_sentence_emb, perturbed_output_token_embs = get_sentence_embeddings(
-        perturbed_output_choice.message.content, model, tokenizer
-    )
 
-    # Reshape embeddings
-    initial_output_sentence_emb = initial_output_sentence_emb.reshape(1, -1)
-    perturbed_output_sentence_emb = perturbed_output_sentence_emb.reshape(1, -1)
+    original_token_id = tokenizer.encode(original_output_str, return_tensors="pt", add_special_tokens=False)
+    perturbed_token_id = tokenizer.encode(perturbed_output_str, return_tensors="pt", add_special_tokens=False)
+    initial_tokens = [tokenizer.decode(t) for t in original_token_id.squeeze(axis=0)]
 
-    # Calculate similarities
-    self_similarity = float(
-        cosine_similarity(initial_output_sentence_emb, initial_output_sentence_emb)
-    )
-    sentence_similarity = float(
-        cosine_similarity(initial_output_sentence_emb, perturbed_output_sentence_emb)
-    )
+    original_output_emb = token_embeddings[original_token_id].reshape(-1, token_embeddings.shape[-1])
+    perturbed_output_emb = token_embeddings[perturbed_token_id].reshape(-1, token_embeddings.shape[-1])
 
-    # Calculate token similarities for shared length
-    shared_length = min(initial_output_token_embs.shape[0], perturbed_output_token_embs.shape[0])
-    token_similarities_shared = cosine_similarity(
-        initial_output_token_embs[:shared_length],
-        perturbed_output_token_embs[:shared_length],
-    ).diagonal()
-
-    # Pad token similarities to match initial token embeddings shape
-    token_similarities = np.pad(
-        token_similarities_shared,
-        (0, initial_output_token_embs.shape[0] - shared_length),
-    )
-
-    # Return difference in sentence similarity and token similarities
-    return self_similarity - sentence_similarity, 1 - token_similarities
+    cosine_distance = 1-cosine_similarity(original_output_emb, perturbed_output_emb)
+    token_distance = cosine_distance.min(axis=-1)    
+    return token_distance.mean(), initial_tokens, token_distance
 
 
 def _is_token_in_top_20(
