@@ -1,6 +1,6 @@
 # LLM Attribution Library
 
-The LLM Attribution Library is designed to compute the contribution of each token in a prompt to the generated response of a language model.  
+The LLM Attribution Library is designed to compute the contribution of each token in a prompt to the generated response of a language model.
 
 It can be used with OpenAI LLMs accessible through an API:  
 ![API-accessible LLM Attribution Table](docs/assets/api-PIZZA.png)
@@ -8,7 +8,8 @@ It can be used with OpenAI LLMs accessible through an API:
 and local LLMs:
 ![Local LLM Attribution Table](docs/assets/local-PIZZA.png)
 
-## Index  
+## Index
+
 - [LLM Attribution Library](#llm-attribution-library)
   - [Index](#index)
   - [Quickstart](#quickstart)
@@ -33,8 +34,7 @@ and local LLMs:
 
 ## Quickstart
 
-
-Attrubution via OpenAI's API:  
+Attrubution via OpenAI's API:
 
 **!!! This will use API credits !!!**
 
@@ -126,6 +126,7 @@ uv pip install -r requirements.txt
 ```
 
 Or to install the dependencies needed to do development on the library:
+
 ```bash
 uv pip install -r requirements-dev.txt
 ```
@@ -133,6 +134,7 @@ uv pip install -r requirements-dev.txt
 Now, you should be able to import and use the library in your Python scripts.
 
 5. To update the lock files that specify the dependency versions:
+
 ```bash
 uv pip compile requirements.in -o requirements.txt
 uv pip compile requirements-dev.in -o requirements-dev.txt
@@ -180,7 +182,6 @@ The `compute_attributions` method generates tokens from the input string and com
 
 `LocalLLMAttributor` uses gradient-based attribution to quantify the influence of input tokens on the output of a model. For each output token, it computes the gradients with respect to the input embeddings. The L1 norm of these gradients is then used as the attribution score, representing the total influence of each input token on the output
 
-
 #### Cleaning Up
 
 A convenience method is provided to clean up memory used by Python and Torch. This can be useful when running the library in a cloud notebook environment:
@@ -194,6 +195,7 @@ local_attributor.cleanup()
 `OpenAIAttributor` uses the OpenAI API to compute attributions. Given that gradients are not accessible, the attributor perturbs the input with a given `PerturbationStrategy` and measures the magnitude of change of the generated output with an `attribution_strategy`.
 
 The `compute_attributions` method:
+
 1. Sends a chat completion request to the OpenAI API.
 2. Uses a `PerturbationStrategy` to modify the input prompt, and sends the perturbed input to OpenAI's API to generate a perturbed output. Each token of the input prompt is perturbed separately, to obtain an attribution score for each input token.
 3. Uses an `attribution_strategy` to compute the magnitude of change between the original and perturbed output.
@@ -219,11 +221,9 @@ The `attribution_strategy` parameter is a string that specifies the method to us
 
 - **Token Displacement Attribution**: Calculates the displacement of each token in the original output within the perturbed output's `top_logprobs` predicted tokens. The `top_logprobs` field contains the most likely tokens for each token position. If a token from the original output is not found in the `top_logprobs` of the perturbed output, a maximum displacement value is assigned. The mean of these displacements is returned, as well as the displacement of each original output token.
 
-
 ### ExperimentLogger
 
 The `ExperimentLogger` class is used to log the results of different experiment runs. It provides methods for starting and stopping an experiment, logging the input and output tokens, and logging the attribution scores. The `api_llm_attribution.ipynb` notebook shows an example of how to use `ExperimentLogger` to compare the results of different attribution strategies.
-
 
 ## Limitations
 
@@ -257,7 +257,6 @@ The device identifider must match the device used on the first embeddings layer 
 
 If no device is specified, the model device will be used by default.
 
-
 ## Development
 
 To contribute to the library, you will need to install the development requirements:
@@ -282,5 +281,6 @@ To run the integration tests:
 python -m pytest tests/integration
 ```
 
-## Research 
+## Research
+
 Some preliminary exploration and research into using attribution and quantitatively measuring attribution success can be found in the examples folder of this repository. We'd be excited to see expansion of this small library, including both algorithmic improvements, further attribution and perturbation methods, and more rigorous and exhaustive experimentation. We welcome pull requests and issues from external collaborators.
