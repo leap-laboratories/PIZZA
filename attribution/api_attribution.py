@@ -37,7 +37,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         openai_model: Optional[str] = DEFAULT_OPENAI_MODEL,
         tokenizer: Optional[PreTrainedTokenizer] = None,
         token_embeddings: Optional[np.ndarray] = None,
-        request_chunksize: Optional[int] = 1000,
+        request_chunksize: Optional[int] = 50,
     ):
         openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
         self.openai_client = openai.AsyncOpenAI(api_key=openai_api_key)
