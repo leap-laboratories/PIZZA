@@ -22,7 +22,7 @@ and local LLMs:
     - [Linting](#linting)
   - [Installation](#installation)
   - [API Design](#api-design)
-    - [BaseLLMAttributor](#basellmattributor)
+    - [BaseLLMAttributor and BaseAsyncLLMAttributor](#basellmattributor-and-baseasyncllmattributor)
     - [LocalLLMAttributor](#localllmattributor)
       - [Cleaning Up](#cleaning-up)
     - [OpenAIAttributor](#openaiattributor)
@@ -158,7 +158,7 @@ Note that `BaseAsyncLLMAttributor` uses `asyncio` to makes requests and therefor
 class BaseLLMAttributor(ABC):
     @abstractmethod
     def compute_attributions(
-        self, input_text: str, **kwargs
+        self, input_text: str, *args, **kwargs
     ) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
         pass
 
@@ -166,7 +166,7 @@ class BaseLLMAttributor(ABC):
 class BaseAsyncLLMAttributor(ABC):
     @abstractmethod
     async def compute_attributions(
-        self, input_text: str, **kwargs
+        self, input_text: str, *args, **kwargs
     ) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
         pass
 ```
@@ -187,7 +187,7 @@ class LocalLLMAttributor:
     ):
         ...
     def compute_attributions(
-        self, input_string: str, **kwargs
+        self, input_string: str, generation_length: int = 5
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         ...
 ```
