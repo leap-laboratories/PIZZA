@@ -150,7 +150,7 @@ The attributors are designed to compute the contribution made by each token in a
 
 ### BaseLLMAttributor and BaseAsyncLLMAttributor
 
-`BaseLLMAttributor` and `BaseAsyncLLMAttributor` are abstract base classes that defines the interface for all LLM attributors. They declare the `compute_attributions` method, which must be implemented by any concrete attributor class. This method takes an input text and computes the attribution scores for each token.
+`BaseLLMAttributor` and `BaseAsyncLLMAttributor` are abstract base classes that define the interfaces for all LLM attributors. They declare the `compute_attributions` method, which must be implemented by any concrete attributor class. This method takes an input text and computes the attribution scores for each token.
 
 Note that `BaseAsyncLLMAttributor` uses `asyncio` to makes requests and therefore calls to `compute_attributions` in concrete classes (such as `OpenAIAttributor`) must be awaited using the `await` keyword.
 
