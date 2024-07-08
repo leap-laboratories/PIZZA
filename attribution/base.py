@@ -12,6 +12,14 @@ class BaseLLMAttributor(ABC):
         pass
 
 
+class BaseAsyncLLMAttributor(ABC):
+    @abstractmethod
+    async def compute_attributions(
+        self, input_text: str, **kwargs
+    ) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
+        pass
+
+
 class BaseLogger(ABC):
     @abstractmethod
     def start_experiment(self, *args, **kwargs):

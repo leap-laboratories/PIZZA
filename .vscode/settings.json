@@ -2,4 +2,7 @@
     "[python]": {
         "editor.defaultFormatter": "charliermarsh.ruff"
     },
+    "terminal.integrated.env.osx": { "PYTHONPATH": "${workspaceFolder}" },
+    "terminal.integrated.env.linux": { "PYTHONPATH": "${workspaceFolder}" },
+    "jupyter.notebookFileRoot": "${workspaceFolder}",
 }
