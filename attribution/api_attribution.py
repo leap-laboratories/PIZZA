@@ -35,8 +35,8 @@ DEFAULT_OPENAI_MODEL = "gpt-3.5-turbo"
 class OpenAIAttributor(BaseAsyncLLMAttributor):
     def __init__(
         self,
+        openai_model: str = DEFAULT_OPENAI_MODEL,
         openai_api_key: Optional[str] = None,
-        openai_model: Optional[str] = DEFAULT_OPENAI_MODEL,
         tokenizer: Optional[PreTrainedTokenizer] = None,
         token_embeddings: Optional[np.ndarray] = None,
         request_chunksize: Optional[int] = 50,
@@ -110,64 +110,25 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         # Now the perturbed output contains the same tokens as the original output, but with the logprobs from the perturbed output.
         return location_invariant_output
 
-    def get_perturbations(self, input_text, chunksize, **kwargs):
-                        
-        perturbation_strategy: PerturbationStrategy = kwargs.get(
-            "perturbation_strategy", FixedPerturbationStrategy()
-        )
+    def get_units(self, input_text, chunksize, **kwargs):
 
         perturb_word_wise: bool = kwargs.get("perturb_word_wise", False)
-        
-        replacement_token_ids = perturbation_strategy.get_replacement_token(0)
 
         # A unit is either a word or a single token, depending on the value of `perturb_word_wise`
         if perturb_word_wise:
             words = [" " + w for w in input_text.split()]
             words[0] = words[0][1:]
             tokens_per_unit = [self.tokenizer.tokenize(word) for word in words]
-            token_ids_per_unit = [
-                self.tokenizer.encode(word, add_special_tokens=False) for word in words
-            ]
         else:
             tokens_per_unit = [[token] for token in self.tokenizer.tokenize(input_text)]
-            token_ids_per_unit = [
-                [token_id]
-                for token_id in self.tokenizer.encode(input_text, add_special_tokens=False)
-            ]
 
-        perturbations = []
-        for idx in range(0, len(tokens_per_unit), chunksize):
+        return tokens_per_unit
 
-            unit_tokens = tokens_per_unit[idx:idx + chunksize]
-
-            # Replace the current word with the new tokens
-            left_token_ids = [
-                token_id
-                for unit_token_ids in token_ids_per_unit[:idx]
-                for token_id in unit_token_ids
-            ]
-            right_token_ids = [
-                token_id
-                for unit_token_ids in token_ids_per_unit[idx + chunksize:]
-                for token_id in unit_token_ids
-            ]
-
-            perturbed_input = self.tokenizer.decode(
-                left_token_ids + [replacement_token_ids] + right_token_ids, skip_special_tokens=True
-            )
-
-            perturbations.append(
-                {
-                    "token_idx": list(range(idx, idx + chunksize)),
-                    "input": perturbed_input,
-                    "unit_tokens": unit_tokens,
-                    "replaced_token_ids": replacement_token_ids,
-                }
-            )
+    async def hierarchical_perturbation(self, input_text: str, init_chunksize: int, threshold: float = 0.5, perturb_word_wise: bool = False, logger: Optional[ExperimentLogger] = None, **kwargs):
         
-        return perturbations
+        tokens = self.get_units(input_text, chunksize=1, perturb_word_wise=perturb_word_wise)
+        token_count = len(tokens)
 
-    async def hierarchical_perturbation(self, input_text: str, init_chunksize: int, stages: int, threshold: float = 0.5, **kwargs):
         perturbation_strategy: PerturbationStrategy = kwargs.get(
             "perturbation_strategy", FixedPerturbationStrategy()
         )
@@ -176,11 +137,15 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             "attribution_strategies", ["cosine", "prob_diff"]
         )
 
-        logger: ExperimentLogger = kwargs.get("logger", None)
-        perturb_word_wise: bool = kwargs.get("perturb_word_wise", False)
+        # Initialize mask with initial chunks
+        masks = []
+        for start in range(0, token_count, init_chunksize):
+            end = min(start + init_chunksize, token_count)
+            mask = np.zeros(token_count, dtype=bool)
+            mask[start:end] = True
+            masks.append(mask)
 
         original_output = await self.get_chat_completion(input_text)
-
         if logger:
             logger.start_experiment(
                 input_text,
@@ -189,43 +154,29 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                 perturb_word_wise,
             )
 
-        chunksize = init_chunksize
-        chunk_scores = None
-        process_chunks = None
-        prev_perturbations = None
-        prev_process_chunks = None
-        total_llm_calls = 0
-        for stage in range(stages):
-            
-            perturbations = self.get_perturbations(input_text, chunksize, **kwargs)
+        final_scores = np.zeros(token_count)
+        total_llm_calls = 1
 
-            if stage > 0:
-                scores = []
-                for perturbation, processed in zip(prev_perturbations, prev_process_chunks):
-                    if processed:
-                        attr = chunk_scores.pop(0)
-                        scores.append(attr[attribution_strategies[0]]["sentence_attribution"])
-                    else:
-                        scores.append(None)
-                    
-                process_chunks = []
-                median_score = statistics.median([s for s in scores if s is not None])
-                for score in scores:
-                    decision = score is not None and (score > threshold or score > median_score) 
-                    process_chunks.extend([decision] * (2 if chunksize > 1 else len(perturbation["unit_tokens"])))
-            else:
-                process_chunks = [True] * len(perturbations)
-
-            prev_perturbations = perturbations
-            
-            perturbations = list(itertools.compress(perturbations, process_chunks))
-            print(f"Stage {stage + 1}: Making {len(perturbations)} API calls")
-
-            outputs = await self.compute_attribution_chunks(perturbations, **kwargs)
+        while masks:
+            new_masks = []
+            perturbation_scores = []
+            perturbations = []
+            for mask in masks:
+                perturbed_units = [token if not mask[i] else perturbation_strategy.replacement_token for i, token in enumerate(tokens)]
+                # TODO: Check this is correct unit > token conversion  
+                perturbed_tokens = ["".join(unit) if isinstance(unit, list) else unit for unit in perturbed_units]
+                # TODO: Make list instead of dict (compute_attribution_chunks change required)
+                perturbations.append(
+                    {
+                        "input": self.tokenizer.convert_tokens_to_string(perturbed_tokens),
+                        "unit_tokens": [tokens[i] for i in np.where(mask)[0]],
+                        "token_idx": np.where(mask)[0].tolist(),
+                    }
+                )
+                
+            outputs = await self.compute_attribution_chunks(perturbations)
             chunk_scores = self.get_scores(outputs, original_output, **kwargs)
-
             total_llm_calls += len(outputs)
-            prev_process_chunks = process_chunks
 
             if logger:
                 for perturbation, output, score in zip(perturbations, outputs, chunk_scores):
@@ -236,7 +187,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                             logger.log_input_token_attribution(
                                 attribution_strategy,
                                 token_id,
-                                unit_token[0],
+                                "".join(unit_token),
                                 float(attr_result["sentence_attribution"]),
                             )
                             for j, attr_score in enumerate(attr_result["token_attributions"]):
@@ -250,67 +201,62 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                                     output.message.content,
                                 )
 
-                logger.log_perturbation(
-                    0, # TODO: Why is this here?
-                    self.tokenizer.decode(perturbation["replaced_token_ids"], skip_special_tokens=True)[
-                        0
-                    ],
-                    perturbation_strategy,
-                    input_text,
-                    original_output.message.content,
-                    perturbation["input"],
-                    output.message.content,
-                )
+                    logger.log_perturbation(
+                        len(perturbation["unit_tokens"]) - 1,
+                        perturbation_strategy.replacement_token,
+                        str(perturbation_strategy),
+                        input_text,
+                        original_output.message.content,
+                        perturbation["input"],
+                        output.message.content,
+                    )
 
-            if stage == stages - 2:
-                chunksize = 1
-            else:
-                chunksize = chunksize // 2
-                if chunksize == 0:
-                    break
+            for mask, score in zip(masks, chunk_scores):
+                attr_score = score[attribution_strategies[0]]["sentence_attribution"]
+                perturbation_scores.append(attr_score)
+                final_scores[mask] = attr_score
 
-        logger.df_token_attribution_matrix = logger.df_token_attribution_matrix.drop_duplicates(subset=["input_token_pos", "output_token"], keep="last").sort_values(by="input_token_pos")
-        logger.df_input_token_attribution = logger.df_input_token_attribution.drop_duplicates(subset=["input_token_pos"], keep="last").sort_values(by="input_token_pos")
-        logger.stop_experiment(num_llm_calls=total_llm_calls)
+            midrange_score = (np.max(perturbation_scores) + np.min(perturbation_scores)) / 2
+            if midrange_score < 0.01:
+                break
+            
+            for mask, score in zip(masks, perturbation_scores):
+                if (score >= midrange_score or score > threshold) and mask.sum() > 1:
+                    # Split the chunk in half
+                    indices = np.where(mask)[0]
+                    mid = len(indices) // 2
+                    
+                    mask1 = np.zeros(token_count, dtype=bool)
+                    mask2 = np.zeros(token_count, dtype=bool)
+                    
+                    mask1[indices[:mid]] = True
+                    mask2[indices[mid:]] = True
+                    
+                    new_masks.append(mask1)
+                    new_masks.append(mask2)
 
-    def get_scores(self, perturbed_output, original_output, **kwargs):
+            masks = new_masks
+
+        if logger:
+            logger.df_token_attribution_matrix = logger.df_token_attribution_matrix.drop_duplicates(subset=["exp_id", "input_token_pos", "output_token"], keep="last").sort_values(by=["input_token_pos", "output_token_pos"]).reset_index(drop=True)
+            logger.df_input_token_attribution = logger.df_input_token_attribution.drop_duplicates(subset=["exp_id","input_token_pos"], keep="last").sort_values(by="input_token_pos").reset_index(drop=True)
+            logger.stop_experiment(num_llm_calls=total_llm_calls)
+
+        return final_scores.tolist()
+
+    def get_scores(self, perturbed_output, original_output, **kwargs) -> list[dict[str, Any]]:
         attribution_strategies: List[str] = kwargs.get(
             "attribution_strategies", ["cosine", "prob_diff"]
         )
 
         ignore_output_token_location: bool = kwargs.get("ignore_output_token_location", True)
-        remaining_output = deepcopy(original_output)
 
         results = []
         for output in perturbed_output:
             if ignore_output_token_location:
-                all_top_logprobs = []
-                all_toks = []
-                for ptl in output.logprobs.content:
-                    all_top_logprobs.extend([tl.logprob for tl in ptl.top_logprobs])
-                    all_toks.extend([tl.token for tl in ptl.top_logprobs])
-
-                sorted_indexes = sorted(
-                    range(len(all_top_logprobs)), key=all_top_logprobs.__getitem__, reverse=True
+                output = self.make_output_location_invariant(
+                    original_output, output
                 )
-                all_toks = [all_toks[s] for s in sorted_indexes]
-                all_top_logprobs = [all_top_logprobs[s] for s in sorted_indexes]
-
-                for otl in remaining_output.logprobs.content:
-                    if otl.token in all_toks:
-                        new_lp = all_top_logprobs[all_toks.index(otl.token)]
-
-                    else:
-                        new_lp = -100
-
-                    otl.logprob = new_lp
-                    for tl in otl.top_logprobs:
-                        if tl.token == otl.token:
-                            tl.logprob = new_lp
-
-                # TODO: Why is this here?
-                remaining_output.message.content = output.message.content
-                output = remaining_output
             
             scores = {}
             for attribution_strategy in attribution_strategies:
@@ -340,7 +286,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
         return results
 
-    async def compute_attribution_chunks(self, perturbations: list[dict[str, Any]], **kwargs):
+    async def compute_attribution_chunks(self, perturbations: list[dict[str, Any]]) -> list[openai.types.CompletionChoice]:
 
         tasks = [asyncio.create_task(self.get_chat_completion(perturbation["input"])) for perturbation in perturbations]
 
@@ -383,7 +329,6 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             )
 
         # A unit is either a word or a single token, depending on the value of `perturb_word_wise`
-        unit_offset = 0
         if perturb_word_wise:
             words = [" " + w for w in input_text.split()]
             words[0] = words[0][1:]
@@ -427,6 +372,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                 {
                     "input": perturbed_input,
                     "unit_tokens": unit_tokens,
+                    "token_id": i_unit,
                     "replaced_token_ids": replacement_token_ids,
                 }
             )
@@ -465,32 +411,30 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                     raise ValueError(f"Unknown attribution strategy: {attribution_strategy}")
 
                 if logger:
-                    for i, unit_token in enumerate(perturbation["unit_tokens"]):
-                        logger.log_input_token_attribution(
+                    logger.log_input_token_attribution(
+                        attribution_strategy,
+                        perturbation["token_id"],
+                        "".join(perturbation["unit_tokens"]),
+                        float(sentence_attr),
+                    )
+                    for j, attr_score in enumerate(token_attributions):
+                        logger.log_token_attribution_matrix(
                             attribution_strategy,
-                            unit_offset + i,
-                            unit_token,
-                            float(sentence_attr),
+                            perturbation["token_id"],
+                            j,
+                            attributed_tokens[j],
+                            attr_score.squeeze(),
+                            perturbation["input"],
+                            perturbed_output.message.content,
                         )
-                        for j, attr_score in enumerate(token_attributions):
-                            logger.log_token_attribution_matrix(
-                                attribution_strategy,
-                                unit_offset + i,
-                                j,
-                                attributed_tokens[j],
-                                attr_score.squeeze(),
-                                perturbation["input"],
-                                perturbed_output.message.content,
-                            )
-            unit_offset += len(perturbation["unit_tokens"])
 
         if logger:
             logger.log_perturbation(
-                i,
+                len(perturbation["unit_tokens"]) - 1,
                 self.tokenizer.decode(perturbation["replaced_token_ids"], skip_special_tokens=True)[
                     0
                 ],
-                perturbation_strategy,
+                str(perturbation_strategy),
                 input_text,
                 original_output.message.content,
                 perturbation["input"],
