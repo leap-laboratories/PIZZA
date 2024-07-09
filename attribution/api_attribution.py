@@ -108,17 +108,15 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         # Now the perturbed output contains the same tokens as the original output, but with the logprobs from the perturbed output.
         return location_invariant_output
 
-    async def compute_attributions(self, input_text: str, **kwargs):
-        perturbation_strategy: PerturbationStrategy = kwargs.get(
-            "perturbation_strategy", FixedPerturbationStrategy()
-        )
-        attribution_strategies: List[str] = kwargs.get(
-            "attribution_strategies", ["cosine", "prob_diff"]
-        )
-        logger: ExperimentLogger = kwargs.get("logger", None)
-        perturb_word_wise: bool = kwargs.get("perturb_word_wise", False)
-        ignore_output_token_location: bool = kwargs.get("ignore_output_token_location", True)
-
+    async def compute_attributions(
+        self,
+        input_text: str,
+        perturbation_strategy: PerturbationStrategy = FixedPerturbationStrategy(),
+        attribution_strategies: List[str] = ["cosine", "prob_diff"],
+        logger: Optional[ExperimentLogger] = None,
+        perturb_word_wise: bool = False,
+        ignore_output_token_location: bool = True,
+    ):
         original_output = await self.get_chat_completion(input_text)
 
         if logger:
@@ -181,8 +179,13 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         # Get the output logprobs for the perturbed inputs
         if self.request_chunksize is not None and len(tasks) > self.request_chunksize:
             outputs = []
-            for idx in tqdm(range(0, len(tasks), self.request_chunksize), desc=f"Sending {self.request_chunksize:.0f} concurrent requests at a time"):
-                batch = [tasks[i] for i in range(idx, min(idx + self.request_chunksize, len(tasks)))]
+            for idx in tqdm(
+                range(0, len(tasks), self.request_chunksize),
+                desc=f"Sending {self.request_chunksize:.0f} concurrent requests at a time",
+            ):
+                batch = [
+                    tasks[i] for i in range(idx, min(idx + self.request_chunksize, len(tasks)))
+                ]
                 outputs.extend(await asyncio.gather(*batch))
                 await asyncio.sleep(0.1)
         else:
