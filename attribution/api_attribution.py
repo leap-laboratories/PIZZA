@@ -1,7 +1,6 @@
 import asyncio
 import itertools
 import os
-import statistics
 from copy import deepcopy
 from typing import Any, List, Optional
 
@@ -30,6 +29,8 @@ from .token_perturbation import (
 load_dotenv()
 
 DEFAULT_OPENAI_MODEL = "gpt-3.5-turbo"
+REQUEST_DELAY = 0.1
+MIN_MIDRANGE_THRESHOLD = 0.01
 
 
 class OpenAIAttributor(BaseAsyncLLMAttributor):
@@ -156,11 +157,14 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
         final_scores = np.zeros(token_count)
         total_llm_calls = 1
+        stage = 0
 
         while masks:
+            print(f"Stage {stage}")
             new_masks = []
             perturbation_scores = []
             perturbations = []
+            masked_out = []
             for mask in masks:
                 perturbed_units = [token if not mask[i] else perturbation_strategy.replacement_token for i, token in enumerate(tokens)]
                 # TODO: Check this is correct unit > token conversion  
@@ -173,7 +177,9 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                         "token_idx": np.where(mask)[0].tolist(),
                     }
                 )
+                masked_out.append([self.tokenizer.convert_tokens_to_string(list(itertools.chain.from_iterable(itertools.compress(tokens, mask)))).strip()])
                 
+            print("Masked out tokens/words:", *masked_out, sep="\n")
             outputs = await self.compute_attribution_chunks(perturbations)
             chunk_scores = self.get_scores(outputs, original_output, **kwargs)
             total_llm_calls += len(outputs)
@@ -217,7 +223,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                 final_scores[mask] = attr_score
 
             midrange_score = (np.max(perturbation_scores) + np.min(perturbation_scores)) / 2
-            if midrange_score < 0.01:
+            if midrange_score < MIN_MIDRANGE_THRESHOLD:
                 break
             
             for mask, score in zip(masks, perturbation_scores):
@@ -236,6 +242,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                     new_masks.append(mask2)
 
             masks = new_masks
+            stage += 1
 
         if logger:
             logger.df_token_attribution_matrix = logger.df_token_attribution_matrix.drop_duplicates(subset=["exp_id", "input_token_pos", "output_token"], keep="last").sort_values(by=["input_token_pos", "output_token_pos"]).reset_index(drop=True)
@@ -301,7 +308,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                     tasks[i] for i in range(idx, min(idx + self.request_chunksize, len(tasks)))
                 ]
                 outputs.extend(await asyncio.gather(*batch))
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(REQUEST_DELAY)
         else:
             outputs = await asyncio.gather(*tasks)
 
