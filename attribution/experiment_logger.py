@@ -1,7 +1,7 @@
 import os
 import pickle
 import time
-from typing import Optional
+from typing import Any, Optional
 
 import pandas as pd
 from IPython.core.getipython import get_ipython
@@ -83,6 +83,31 @@ class ExperimentLogger:
         self.df_experiments.loc[len(self.df_experiments) - 1, "num_llm_calls"] = (
             num_llm_calls
         )
+
+    def log_attributions(self, perturbation: dict[str, Any], attribution_scores: dict[str, Any], output: str):
+
+        for unit_token, token_id in zip(perturbation["masked_tokens"], perturbation["token_idx"]):
+            for strategy, result in attribution_scores.items():
+                
+                self.log_input_token_attribution(
+                    strategy,
+                    token_id,
+                    unit_token,
+                    float(result["sentence_attribution"]),
+                )
+
+                j = 0
+                for output_token, attr_score in result["token_attribution"].items():
+                    self.log_token_attribution_matrix(
+                        strategy,
+                        token_id,
+                        j,
+                        output_token,
+                        attr_score,
+                        perturbation["input_string"],
+                        output,
+                    )
+                    j += 1
 
     def log_input_token_attribution(
         self,
