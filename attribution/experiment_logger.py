@@ -40,6 +40,7 @@ class ExperimentLogger:
                 "output_token_pos",
                 "output_token",
                 "attr_score",
+                "depth",
                 "perturbed_input",
                 "perturbed_output",
             ]
@@ -84,7 +85,7 @@ class ExperimentLogger:
             num_llm_calls
         )
 
-    def log_attributions(self, perturbation: dict[str, Any], attribution_scores: dict[str, Any], output: str):
+    def log_attributions(self, perturbation: dict[str, Any], attribution_scores: dict[str, Any], output: str, depth: int = 0):
 
         for unit_token, token_id in zip(perturbation["masked_tokens"], perturbation["token_idx"]):
             for strategy, result in attribution_scores.items():
@@ -106,6 +107,7 @@ class ExperimentLogger:
                         attr_score,
                         perturbation["input_string"],
                         output,
+                        depth,
                     )
                     j += 1
 
@@ -133,6 +135,7 @@ class ExperimentLogger:
         attr_score: float,
         perturbed_input: str,
         perturbed_output: str,
+        depth: int = 0,
     ):
         self.df_token_attribution_matrix.loc[len(self.df_token_attribution_matrix)] = {
             "exp_id": self.experiment_id,
@@ -141,6 +144,7 @@ class ExperimentLogger:
             "output_token_pos": output_token_pos,
             "output_token": output_token,
             "attr_score": attr_score,
+            "depth": depth,
             "perturbed_input": perturbed_input,
             "perturbed_output": perturbed_output,
         }
@@ -298,6 +302,7 @@ class ExperimentLogger:
         self.pretty_print(self.df_perturbations)
 
     def format_attribution_table(self):
+        # TODO: This is out of date, assuming df_token_attr should be df_token_attribution_matrix, "token_pos" needs to be updated to either input or output token pos.
         df_pivot = self.df_token_attr.pivot(
             index="exp_id", columns="token_pos", values=["token", "attr_score"]
         )
