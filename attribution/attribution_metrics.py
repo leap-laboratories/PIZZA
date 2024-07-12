@@ -1,5 +1,5 @@
 import math
-from typing import List, Tuple
+from typing import List
 
 import numpy as np
 import openai
@@ -11,12 +11,11 @@ NEAR_ZERO_PROB = -100  # Logprob constant for near zero probability
 def token_prob_attribution(
     initial_logprobs: openai.types.chat.chat_completion.ChoiceLogprobs,
     perturbed_logprobs: openai.types.chat.chat_completion.ChoiceLogprobs,
-) -> Tuple[float, List[str], np.ndarray]:
+) -> dict[str, float]:
     # Extract token and logprob from initial_logprobs
     initial_token_logprobs = [
         (logprob.token, logprob.logprob) for logprob in initial_logprobs.content
     ]
-    initial_tokens = [content.token for content in initial_logprobs.content]
 
     # Create a list of dictionaries with token and top logprobs from perturbed_logprobs
     perturbed_token_logprobs_list = [
@@ -25,7 +24,7 @@ def token_prob_attribution(
     ]
 
     # Probability change for each input token
-    prob_difference_per_token = np.zeros(len(initial_tokens))
+    prob_difference_per_token = {}
 
     # Calculate the absolute difference in probabilities for each token
     for i, initial_token in enumerate(initial_token_logprobs):
@@ -33,10 +32,11 @@ def token_prob_attribution(
             perturbed_token_logprobs_list[i] if i < len(perturbed_token_logprobs_list) else {}
         )
         perturbed_logprob = perturbed_token_logprobs.get(initial_token[0], NEAR_ZERO_PROB)
-        prob_difference_per_token[i] = math.exp(initial_token[1]) - math.exp(perturbed_logprob)
+        prob_difference = math.exp(initial_token[1]) - math.exp(perturbed_logprob)
+        prob_difference_per_token[initial_token[0]] = prob_difference
 
     # Note: Different length outputs shift the mean upwards. This may or may not be desired behaviour.
-    return prob_difference_per_token.mean(), initial_tokens, prob_difference_per_token
+    return prob_difference_per_token
 
 
 def cosine_similarity_attribution(
@@ -44,7 +44,7 @@ def cosine_similarity_attribution(
     perturbed_output_str: str,
     token_embeddings: np.ndarray,
     tokenizer: PreTrainedTokenizer,
-) -> Tuple[float, list[str], np.ndarray]:
+) -> dict[str, float]:
     # Extract embeddings
 
     original_token_id = tokenizer.encode(original_output_str, return_tensors="pt", add_special_tokens=False)
@@ -55,8 +55,8 @@ def cosine_similarity_attribution(
     perturbed_output_emb = token_embeddings[perturbed_token_id].reshape(-1, token_embeddings.shape[-1])
 
     cosine_distance = 1-cosine_similarity(original_output_emb, perturbed_output_emb)
-    token_distance = cosine_distance.min(axis=-1)    
-    return token_distance.mean(), initial_tokens, token_distance
+    token_distance = cosine_distance.min(axis=-1)
+    return {token: distance for token, distance in zip(initial_tokens, token_distance)}
 
 
 def _is_token_in_top_20(
