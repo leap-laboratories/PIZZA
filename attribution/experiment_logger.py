@@ -6,7 +6,7 @@ from typing import Any, Optional
 import pandas as pd
 from IPython.core.getipython import get_ipython
 
-from .token_perturbation import PerturbationStrategy
+from .token_perturbation import PerturbationStrategy, PerturbedLLMInput
 
 
 class ExperimentLogger:
@@ -85,9 +85,9 @@ class ExperimentLogger:
             num_llm_calls
         )
 
-    def log_attributions(self, perturbation: dict[str, Any], attribution_scores: dict[str, Any], output: str, depth: int = 0):
+    def log_attributions(self, perturbation: PerturbedLLMInput, attribution_scores: dict[str, Any], output: str, depth: int = 0):
 
-        for unit_token, token_id in zip(perturbation["masked_tokens"], perturbation["token_idx"]):
+        for unit_token, token_id in zip(perturbation.masked_units, perturbation.unit_idx):
             for strategy, result in attribution_scores.items():
                 
                 self.log_input_token_attribution(
@@ -105,7 +105,7 @@ class ExperimentLogger:
                         j,
                         output_token,
                         attr_score,
-                        perturbation["input_string"],
+                        perturbation.input_string,
                         output,
                         depth,
                     )

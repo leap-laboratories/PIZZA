@@ -24,6 +24,7 @@ from .experiment_logger import ExperimentLogger
 from .token_perturbation import (
     FixedPerturbationStrategy,
     PerturbationStrategy,
+    PerturbedLLMInput,
 )
 from .types import StrictChoice
 
@@ -137,7 +138,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
         units, tokens_per_unit, ids_per_unit = self.get_units(original_input, perturb_word_wise=perturb_word_wise)
 
-        perturbations = []
+        perturbations: list[PerturbedLLMInput] = []
         for i_unit, unit in enumerate(units):
             perturbed_unit = [
                 self.tokenizer.decode(perturbation_strategy.get_replacement_token(token_id)).strip()
@@ -147,10 +148,15 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             perturbed_input = deepcopy(tokens_per_unit)
             perturbed_input[i_unit] = perturbed_unit
 
-            perturbation = self.get_perturbation(perturbed_input, [unit], [i_unit])
+            perturbation = PerturbedLLMInput(
+                input_units=perturbed_input, 
+                masked_units=[unit], 
+                unit_idx=[i_unit], 
+                tokenizer=self.tokenizer,
+            )
             perturbations.append(perturbation)
 
-        outputs = await self.compute_attribution_chunks([perturbation["input_string"] for perturbation in perturbations])
+        outputs = await self.compute_attribution_chunks([perturbation.input_string for perturbation in perturbations])
         
         for perturbation, output in zip(perturbations, outputs):
             attribution_scores, _ = self.get_scores(
@@ -168,12 +174,12 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                 )
 
                 logger.log_perturbation(
-                    len(perturbation["masked_tokens"]) - 1,
-                    perturbation["masked_string"],
+                    len(perturbation.masked_units) - 1,
+                    perturbation.masked_string,
                     str(perturbation_strategy),
                     original_input,
                     original_output.message.content,
-                    perturbation["input_string"],
+                    perturbation.input_string,
                     output.message.content,
                 )
             
@@ -199,17 +205,6 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         units = ["".join(tokens) for tokens in tokens_per_unit]
 
         return units, tokens_per_unit, token_ids_per_unit
-    
-    def get_perturbation(self, perturbed_input: list[list[str]], perturbed_units: list[str], perturbed_idx: list[int]):
-        
-        # TODO: Move to own class definition, since we use it in the logger too.
-        return {
-            "input_tokens": perturbed_input,
-            "input_string": self.tokenizer.convert_tokens_to_string(["".join(unit) for unit in perturbed_input]),
-            "masked_tokens": perturbed_units,
-            "masked_string": self.tokenizer.convert_tokens_to_string(perturbed_units).strip(),
-            "token_idx": perturbed_idx,
-        }
 
     async def hierarchical_perturbation(
             self, 
@@ -258,7 +253,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         while masks:
             print(f"Stage {stage}: making {len(masks)} perturbations")
             new_masks = []
-            perturbations = []
+            perturbations: list[PerturbedLLMInput] = []
             for mask in masks:
                 
                 perturbed_input = []
@@ -272,21 +267,22 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                         perturbed_input.append(perturbed_unit)
                         perturbed_units.append(unit)
                     else:
-                        perturbed_input.append(unit)
+                        perturbed_input.append([unit])
 
-                perturbation = self.get_perturbation(
-                    perturbed_input, 
-                    perturbed_units, 
-                    np.where(mask)[0].tolist()
+                perturbation = PerturbedLLMInput(
+                    input_units=perturbed_input, 
+                    masked_units=perturbed_units, 
+                    unit_idx=np.where(mask)[0].tolist(),
+                    tokenizer=self.tokenizer,
                 )
 
                 perturbations.append(perturbation)
             
             if verbose:
                 print("Masked out tokens/words:")
-                print(*[[perturbation["masked_string"]] for perturbation in perturbations], sep="\n")
+                print(*[[perturbation.masked_string] for perturbation in perturbations], sep="\n")
             
-            outputs = await self.compute_attribution_chunks([perturbation["input_string"] for perturbation in perturbations])
+            outputs = await self.compute_attribution_chunks([perturbation.input_string for perturbation in perturbations])
             total_llm_calls += len(outputs)
             
             chunk_scores = []
@@ -315,12 +311,12 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                     )
 
                     logger.log_perturbation(
-                        len(perturbation["masked_tokens"]) - 1,
-                        perturbation["masked_string"],
+                        len(perturbation.masked_units) - 1,
+                        perturbation.masked_string,
                         str(perturbation_strategy),
                         original_input,
                         original_output.message.content,
-                        perturbation["input_string"],
+                        perturbation.input_string,
                         output.message.content,
                     )
             
