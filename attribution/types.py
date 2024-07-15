@@ -1,19 +1,26 @@
-from openai.types.chat.chat_completion import (
-    ChatCompletionMessage,  # type: ignore
-    Choice,
-    ChoiceLogprobs,
-)
 from openai.types.chat.chat_completion_token_logprob import ChatCompletionTokenLogprob
+from pydantic import BaseModel, ConfigDict
+
+# These types are generally based on OpenAI types but made "strict" to avoid type errors caused by optional properties.
+# In the future these should be abstracted to allow for other LLM architectures.
+
+class StrictChatCompletionMessage(BaseModel):
+
+    model_config = ConfigDict(extra="allow")
+
+    content: str
+
+class StrictChoiceLogprobs(BaseModel):
+    
+    model_config = ConfigDict(extra="allow")
+    
+    content: list[ChatCompletionTokenLogprob]
 
 
-class StrictChatCompletionMessage(ChatCompletionMessage):
-    content: str  # type: ignore
+class StrictChoice(BaseModel):
 
+    model_config = ConfigDict(extra="allow")
 
-class StrictChoiceLogprobs(ChoiceLogprobs):
-    content: list[ChatCompletionTokenLogprob] # type: ignore
-
-
-class StrictChoice(Choice):
-    logprobs: StrictChoiceLogprobs # type: ignore
+    index: int
+    logprobs: StrictChoiceLogprobs
     message: StrictChatCompletionMessage

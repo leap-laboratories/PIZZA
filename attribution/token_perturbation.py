@@ -7,6 +7,26 @@ from sklearn.neighbors import NearestNeighbors
 from transformers import GPT2LMHeadModel, GPT2Tokenizer, PreTrainedTokenizer
 
 
+class PerturbedLLMInput(BaseModel):
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    input_units: list[list[str]]
+    masked_units: list[str]
+    unit_idx: list[int]
+    tokenizer: PreTrainedTokenizer
+
+    @computed_field
+    @cached_property
+    def input_string(self) -> str:
+        return self.tokenizer.convert_tokens_to_string(["".join(unit) for unit in self.input_units])
+
+    @computed_field
+    @cached_property
+    def masked_string(self) -> str:
+        return self.tokenizer.convert_tokens_to_string(self.masked_units).strip()
+
+
 class PerturbationStrategy:
     def get_replacement_token(self, token_id_to_replace: int) -> int:
         raise NotImplementedError
@@ -103,23 +123,3 @@ def get_increasingly_distant_token_ids(
 
     # Return the tokens at the specified positions
     return [int(sorted_tokens[pos - 1]) for pos in positions]
-
-
-class PerturbedLLMInput(BaseModel):
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    input_units: list[list[str]]
-    masked_units: list[str]
-    unit_idx: list[int]
-    tokenizer: PreTrainedTokenizer
-
-    @computed_field
-    @cached_property
-    def input_string(self) -> str:
-        return self.tokenizer.convert_tokens_to_string(["".join(unit) for unit in self.input_units])
-
-    @computed_field
-    @cached_property
-    def masked_string(self) -> str:
-        return self.tokenizer.convert_tokens_to_string(self.masked_units)
