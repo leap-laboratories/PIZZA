@@ -209,13 +209,13 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
     async def hierarchical_perturbation(
             self, 
             original_input: str, 
-            init_chunksize: int,
+            init_chunk_size: int,
             threshold: float = 0.5, 
-            perturb_word_wise: bool = False, 
-            sliding_window: Optional[int] = None, 
+            stride: Optional[int] = None, 
             logger: Optional[ExperimentLogger] = None, 
             perturbation_strategy: PerturbationStrategy = FixedPerturbationStrategy(),
             attribution_strategies: list[str] = ["cosine", "prob_diff"],
+            perturb_word_wise: bool = False, 
             ignore_output_token_location: bool = True,
             verbose: bool = False,
         ) -> pd.Series:
@@ -223,14 +223,14 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         units, _, ids_per_unit = self.get_units(original_input, perturb_word_wise=perturb_word_wise)
         unit_count = len(units)
 
-        if sliding_window is None:
-            sliding_window = init_chunksize
+        if stride is None:
+            stride = init_chunk_size
 
-        padding = sliding_window // 2
+        padding = stride // 2
 
         masks = []
-        for start in range(-padding, unit_count + padding, sliding_window):
-            end = min(start + init_chunksize, unit_count)
+        for start in range(-padding, unit_count + padding, stride):
+            end = min(start + init_chunk_size, unit_count)
             mask = np.zeros(unit_count, dtype=bool)
             mask[max(start, 0):min(end, unit_count)] = True
             
