@@ -25,6 +25,7 @@ from .token_perturbation import (
     FixedPerturbationStrategy,
     PerturbationStrategy,
 )
+from .types import StrictChoice
 
 load_dotenv()
 
@@ -49,11 +50,11 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         self.tokenizer = tokenizer or GPT2Tokenizer.from_pretrained("gpt2")
         self.token_embeddings = (
             token_embeddings
-            or GPT2LMHeadModel.from_pretrained("gpt2").transformer.wte.weight.detach().numpy()
+            or GPT2LMHeadModel.from_pretrained("gpt2").transformer.wte.weight.detach().numpy() # type: ignore
         )
         self.request_chunksize = request_chunksize
 
-    async def get_chat_completion(self, input: str) -> openai.types.chat.chat_completion.Choice:
+    async def get_chat_completion(self, input: str) -> StrictChoice:
         response = await self.openai_client.chat.completions.create(
             model=self.openai_model,
             messages=[{"role": "user", "content": input}],
@@ -62,9 +63,13 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             logprobs=True,
             top_logprobs=20,
         )
-        return response.choices[0]
+        return StrictChoice(**response.choices[0].model_dump())
 
-    def make_output_location_invariant(self, original_output, perturbed_output):
+    def make_output_location_invariant(
+            self, 
+            original_output: StrictChoice, 
+            perturbed_output: StrictChoice,
+        ):
         # Making a copy of the original output, so we can update it with the perturbed output log probs, wherever a token from the unperturned output is found in the perturbed output.
         location_invariant_output = deepcopy(original_output)
 
@@ -360,15 +365,15 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
     def get_scores(
             self, 
-            perturbed_output, 
-            original_output, 
+            perturbed_output: StrictChoice, 
+            original_output: StrictChoice, 
             attribution_strategies: list[str],
             chunksize: int = 1,
             ignore_output_token_location: bool = True,
         ) -> tuple[dict[str, Any], dict[str, Any]]:
 
         if ignore_output_token_location:
-            output = self.make_output_location_invariant(
+            perturbed_output = self.make_output_location_invariant(
                 original_output, perturbed_output
             )
         
@@ -378,13 +383,13 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             if attribution_strategy == "cosine":
                 token_attributions = cosine_similarity_attribution(
                     original_output.message.content,
-                    output.message.content,
+                    perturbed_output.message.content,
                     self.token_embeddings,
                     self.tokenizer,
                 )
             elif attribution_strategy == "prob_diff":
                 token_attributions = token_prob_attribution(
-                    original_output.logprobs, output.logprobs
+                    original_output.logprobs, perturbed_output.logprobs
                 )
             else:
                 raise ValueError(f"Unknown attribution strategy: {attribution_strategy}")
@@ -400,7 +405,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
         return scores, norm_scores
 
-    async def compute_attribution_chunks(self, inputs: list[str]) -> list[openai.types.CompletionChoice]:
+    async def compute_attribution_chunks(self, inputs: list[str]) -> list[StrictChoice]:
 
         tasks = [asyncio.create_task(self.get_chat_completion(inp)) for inp in inputs]
 
