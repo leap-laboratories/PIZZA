@@ -7,7 +7,7 @@ import torch
 class BaseLLMAttributor(ABC):
     @abstractmethod
     def compute_attributions(
-        self, input_text: str, **kwargs
+        self, input_text: str, *args, **kwargs
     ) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
         pass
 
@@ -15,7 +15,7 @@ class BaseLLMAttributor(ABC):
 class BaseAsyncLLMAttributor(ABC):
     @abstractmethod
     async def compute_attributions(
-        self, input_text: str, **kwargs
+        self, input_text: str, *args, **kwargs
     ) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
         pass
 

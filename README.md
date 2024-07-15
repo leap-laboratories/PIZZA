@@ -22,7 +22,7 @@ and local LLMs:
     - [Linting](#linting)
   - [Installation](#installation)
   - [API Design](#api-design)
-    - [BaseLLMAttributor](#basellmattributor)
+    - [BaseLLMAttributor and BaseAsyncLLMAttributor](#basellmattributor-and-baseasyncllmattributor)
     - [LocalLLMAttributor](#localllmattributor)
       - [Cleaning Up](#cleaning-up)
     - [OpenAIAttributor](#openaiattributor)
@@ -150,7 +150,7 @@ The attributors are designed to compute the contribution made by each token in a
 
 ### BaseLLMAttributor and BaseAsyncLLMAttributor
 
-`BaseLLMAttributor` and `BaseAsyncLLMAttributor` are abstract base classes that defines the interface for all LLM attributors. They declare the `compute_attributions` method, which must be implemented by any concrete attributor class. This method takes an input text and computes the attribution scores for each token.
+`BaseLLMAttributor` and `BaseAsyncLLMAttributor` are abstract base classes that define the interfaces for all LLM attributors. They declare the `compute_attributions` method, which must be implemented by any concrete attributor class. This method takes an input text and computes the attribution scores for each token.
 
 Note that `BaseAsyncLLMAttributor` uses `asyncio` to makes requests and therefore calls to `compute_attributions` in concrete classes (such as `OpenAIAttributor`) must be awaited using the `await` keyword.
 
@@ -158,7 +158,7 @@ Note that `BaseAsyncLLMAttributor` uses `asyncio` to makes requests and therefor
 class BaseLLMAttributor(ABC):
     @abstractmethod
     def compute_attributions(
-        self, input_text: str, **kwargs
+        self, input_text: str, *args, **kwargs
     ) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
         pass
 
@@ -166,7 +166,7 @@ class BaseLLMAttributor(ABC):
 class BaseAsyncLLMAttributor(ABC):
     @abstractmethod
     async def compute_attributions(
-        self, input_text: str, **kwargs
+        self, input_text: str, *args, **kwargs
     ) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
         pass
 ```
@@ -187,7 +187,7 @@ class LocalLLMAttributor:
     ):
         ...
     def compute_attributions(
-        self, input_string: str, **kwargs
+        self, input_string: str, generation_length: int = 5
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         ...
 ```

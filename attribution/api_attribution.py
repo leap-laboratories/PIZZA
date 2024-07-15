@@ -1,7 +1,7 @@
 import asyncio
 import os
 from copy import deepcopy
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 import numpy as np
 import openai
@@ -111,14 +111,15 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         # Now the perturbed output contains the same tokens as the original output, but with the logprobs from the perturbed output.
         return location_invariant_output
 
-    async def compute_attributions(self, original_input: str, **kwargs):
-        perturbation_strategy: PerturbationStrategy = kwargs.get(
-            "perturbation_strategy", FixedPerturbationStrategy()
-        )
-
-        logger: ExperimentLogger = kwargs.get("logger", None)
-        perturb_word_wise: bool = kwargs.get("perturb_word_wise", False)
-
+    async def compute_attributions(
+        self,
+        original_input: str,
+        perturbation_strategy: PerturbationStrategy = FixedPerturbationStrategy(),
+        attribution_strategies: list[str] = ["cosine", "prob_diff"],
+        logger: Optional[ExperimentLogger] = None,
+        perturb_word_wise: bool = False,
+        ignore_output_token_location: bool = True,
+    ):
         original_output = await self.get_chat_completion(original_input)
 
         if logger:
@@ -147,8 +148,13 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         outputs = await self.compute_attribution_chunks([perturbation["input_string"] for perturbation in perturbations])
         
         for perturbation, output in zip(perturbations, outputs):
-            attribution_scores, _ = self.get_scores(output, original_output, 1, **kwargs)
-            
+            attribution_scores, _ = self.get_scores(
+                perturbed_output=output, 
+                original_output=original_output, 
+                attribution_strategies=attribution_strategies,
+                ignore_output_token_location=ignore_output_token_location
+            )
+
             if logger:
                 logger.log_attributions(
                     perturbation, 
@@ -169,9 +175,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         if logger:
             logger.stop_experiment(num_llm_calls=len(outputs) + 1)
 
-    def get_units(self, input_text, **kwargs) -> tuple[list[str], list[list[str]], list[list[int]]]:
-
-        perturb_word_wise: bool = kwargs.get("perturb_word_wise", False)
+    def get_units(self, input_text: str, perturb_word_wise: bool = False) -> tuple[list[str], list[list[str]], list[list[int]]]:
 
         # A unit is either a word or a single token, depending on the value of `perturb_word_wise`
         if perturb_word_wise:
@@ -210,20 +214,14 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             perturb_word_wise: bool = False, 
             sliding_window: Optional[int] = None, 
             logger: Optional[ExperimentLogger] = None, 
-            verbose: bool = False, 
-            **kwargs
+            perturbation_strategy: PerturbationStrategy = FixedPerturbationStrategy(),
+            attribution_strategies: list[str] = ["cosine", "prob_diff"],
+            ignore_output_token_location: bool = True,
+            verbose: bool = False,
         ) -> pd.Series:
         
         units, _, ids_per_unit = self.get_units(original_input, perturb_word_wise=perturb_word_wise)
         unit_count = len(units)
-
-        perturbation_strategy: PerturbationStrategy = kwargs.get(
-            "perturbation_strategy", FixedPerturbationStrategy()
-        )
-
-        attribution_strategies: List[str] = kwargs.get(
-            "attribution_strategies", ["cosine", "prob_diff"]
-        )
 
         if sliding_window is None:
             sliding_window = init_chunksize
@@ -291,7 +289,14 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             
             i = 0
             for perturbation, output, mask in zip(perturbations, outputs, masks):
-                attribution_scores, norm_attribution_scores = self.get_scores(output, original_output, sum(mask), **kwargs)
+                attribution_scores, norm_attribution_scores = self.get_scores(
+                    perturbed_output=output, 
+                    original_output=original_output, 
+                    attribution_strategies=attribution_strategies,
+                    chunksize=sum(mask),
+                    ignore_output_token_location=ignore_output_token_location,
+                )
+
                 chunk_scores.append(attribution_scores[attribution_strategies[0]]["sentence_attribution"])
                 unit_attribution[i, mask] = norm_attribution_scores[attribution_strategies[0]]["sentence_attribution"]
                 i += 1
@@ -353,12 +358,14 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
         return pd.Series(cumulative_unit_attribution, index=units, name="saliency")
 
-    def get_scores(self, perturbed_output, original_output, chunksize: int, **kwargs) -> tuple[dict[str, Any], dict[str, Any]]:
-        attribution_strategies: List[str] = kwargs.get(
-            "attribution_strategies", ["cosine", "prob_diff"]
-        )
-
-        ignore_output_token_location: bool = kwargs.get("ignore_output_token_location", True)
+    def get_scores(
+            self, 
+            perturbed_output, 
+            original_output, 
+            attribution_strategies: list[str],
+            chunksize: int = 1,
+            ignore_output_token_location: bool = True,
+        ) -> tuple[dict[str, Any], dict[str, Any]]:
 
         if ignore_output_token_location:
             output = self.make_output_location_invariant(
