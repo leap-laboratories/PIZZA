@@ -55,7 +55,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         )
         self.request_chunksize = request_chunksize
 
-    async def get_chat_completion(self, input: str) -> StrictChoice:
+    async def _get_chat_completion(self, input: str) -> StrictChoice:
         response = await self.openai_client.chat.completions.create(
             model=self.openai_model,
             messages=[{"role": "user", "content": input}],
@@ -66,7 +66,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         )
         return StrictChoice(**response.choices[0].model_dump())
 
-    def make_output_location_invariant(
+    def _make_output_location_invariant(
             self, 
             original_output: StrictChoice, 
             perturbed_output: StrictChoice,
@@ -126,7 +126,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         perturb_word_wise: bool = False,
         ignore_output_token_location: bool = True,
     ):
-        original_output = await self.get_chat_completion(original_input)
+        original_output = await self._get_chat_completion(original_input)
 
         if logger:
             logger.start_experiment(
@@ -136,7 +136,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                 perturb_word_wise,
             )
 
-        units, tokens_per_unit, ids_per_unit = self.get_units(original_input, perturb_word_wise=perturb_word_wise)
+        units, tokens_per_unit, ids_per_unit = self._get_units(original_input, perturb_word_wise=perturb_word_wise)
 
         perturbations: list[PerturbedLLMInput] = []
         for i_unit, unit in enumerate(units):
@@ -156,11 +156,11 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             )
             perturbations.append(perturbation)
 
-        outputs = await self.compute_attribution_chunks([perturbation.input_string for perturbation in perturbations])
+        outputs = await self._get_multiple_completions([perturbation.input_string for perturbation in perturbations])
         
         for perturbation, output in zip(perturbations, outputs):
             for strategy in attribution_strategies:    
-                attribution_scores, _ = self.get_scores(
+                attribution_scores, _ = self._get_scores(
                     perturbed_output=output, 
                     original_output=original_output, 
                     attribution_strategy=strategy,
@@ -188,7 +188,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         if logger:
             logger.stop_experiment(num_llm_calls=len(outputs) + 1)
 
-    def get_units(self, input_text: str, perturb_word_wise: bool = False) -> tuple[list[str], list[list[str]], list[list[int]]]:
+    def _get_units(self, input_text: str, perturb_word_wise: bool = False) -> tuple[list[str], list[list[str]], list[list[int]]]:
         
         # TODO: This should be abstracted, potentially moved to PerturbedLLMInput
         # A unit is either a word or a single token, depending on the value of `perturb_word_wise`
@@ -223,7 +223,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             verbose: bool = False,
         ) -> pd.Series:
         
-        units, _, ids_per_unit = self.get_units(original_input, perturb_word_wise=perturb_word_wise)
+        units, _, ids_per_unit = self._get_units(original_input, perturb_word_wise=perturb_word_wise)
         unit_count = len(units)
 
         if stride is None:
@@ -231,6 +231,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
         padding = stride // 2
 
+        # TODO: Abstract to create_masks function/method
         masks = []
         for start in range(-padding, unit_count + padding, stride):
             end = min(start + init_chunk_size, unit_count)
@@ -240,7 +241,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             if mask.any():
                 masks.append(mask)
 
-        original_output = await self.get_chat_completion(original_input)
+        original_output = await self._get_chat_completion(original_input)
         if logger:
             logger.start_experiment(
                 original_input,
@@ -287,7 +288,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                 print("Masked out tokens/words:")
                 print(*[[perturbation.masked_string] for perturbation in perturbations], sep="\n")
             
-            outputs = await self.compute_attribution_chunks([perturbation.input_string for perturbation in perturbations])
+            outputs = await self._get_multiple_completions([perturbation.input_string for perturbation in perturbations])
             total_llm_calls += len(outputs)
             
             chunk_scores = []
@@ -296,7 +297,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             for i, (perturbation, output, mask) in enumerate(zip(perturbations, outputs, masks)):
                 
                 for strategy in attribution_strategies:
-                    attribution_scores, norm_attribution_scores = self.get_scores(
+                    attribution_scores, norm_attribution_scores = self._get_scores(
                         perturbed_output=output, 
                         original_output=original_output, 
                         attribution_strategy=strategy,
@@ -338,6 +339,8 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             
             # Calculate midrange threshold value
             midrange_score = (np.max(cumulative_unit_attribution) + np.min(cumulative_unit_attribution)) / 2
+            if midrange_score < MIN_MIDRANGE_THRESHOLD:
+                break
             
             for mask, chunk_attribution in zip(masks, chunk_scores):
                 cumulative_chunk_attribution = cumulative_unit_attribution[mask].mean()
@@ -367,7 +370,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
         return pd.Series(cumulative_unit_attribution, index=units, name="saliency")
 
-    def get_scores(
+    def _get_scores(
             self, 
             perturbed_output: StrictChoice, 
             original_output: StrictChoice, 
@@ -377,7 +380,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         ) -> tuple[dict[str, Any], dict[str, Any]]:
 
         if ignore_output_token_location:
-            perturbed_output = self.make_output_location_invariant(
+            perturbed_output = self._make_output_location_invariant(
                 original_output, perturbed_output
             )
         
@@ -406,9 +409,9 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
         return scores, norm_scores
 
-    async def compute_attribution_chunks(self, inputs: list[str]) -> list[StrictChoice]:
+    async def _get_multiple_completions(self, inputs: list[str]) -> list[StrictChoice]:
 
-        tasks = [asyncio.create_task(self.get_chat_completion(inp)) for inp in inputs]
+        tasks = [asyncio.create_task(self._get_chat_completion(inp)) for inp in inputs]
 
         # Get the output logprobs for the perturbed inputs
         if self.request_chunksize is not None and len(tasks) > self.request_chunksize:
