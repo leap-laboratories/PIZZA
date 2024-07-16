@@ -1,5 +1,5 @@
 # PIZZA
-PIZZA: an LLM Attribution Library © 2024 by Leap Laboratories is licensed under CC BY-NC-SA 4.0 
+PIZZA: an LLM Attribution Library © 2024 by [Leap Laboratories](https://www.leap-labs.com/) is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1)
 
 `P`rompt `I`nput `Z`onal `Z`? `A`ttribution analyzer
 
