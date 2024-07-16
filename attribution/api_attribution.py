@@ -25,6 +25,7 @@ from .token_perturbation import (
     FixedPerturbationStrategy,
     PerturbationStrategy,
     PerturbedLLMInput,
+    get_units_from_prompt,
 )
 from .types import StrictChoice
 
@@ -32,7 +33,7 @@ load_dotenv()
 
 DEFAULT_OPENAI_MODEL = "gpt-3.5-turbo"
 REQUEST_DELAY = 0.1
-MIN_MIDRANGE_THRESHOLD = 0.01
+MIN_MAXIMUM_THRESHOLD = 0.01
 
 
 class OpenAIAttributor(BaseAsyncLLMAttributor):
@@ -64,7 +65,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         perturb_word_wise: bool = False,
         ignore_output_token_location: bool = True,
     ):
-        original_output = await self._get_chat_completion(original_input)
+        original_output = await self.get_chat_completion(original_input)
 
         if logger:
             logger.start_experiment(
@@ -74,7 +75,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                 perturb_word_wise,
             )
 
-        units, tokens_per_unit, ids_per_unit = self._get_units(original_input, perturb_word_wise=perturb_word_wise)
+        units, tokens_per_unit, ids_per_unit = get_units_from_prompt(original_input, self.tokenizer, perturb_word_wise=perturb_word_wise)
 
         perturbations: list[PerturbedLLMInput] = []
         for i_unit, unit in enumerate(units):
@@ -94,7 +95,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             )
             perturbations.append(perturbation)
 
-        outputs = await self._get_multiple_completions([perturbation.input_string for perturbation in perturbations])
+        outputs = await self.get_multiple_completions([perturbation.input_string for perturbation in perturbations])
         
         for perturbation, output in zip(perturbations, outputs):
             for strategy in attribution_strategies:    
@@ -140,7 +141,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             verbose: bool = False,
         ) -> pd.Series:
         
-        units, _, ids_per_unit = self._get_units(original_input, perturb_word_wise=perturb_word_wise)
+        units, _, ids_per_unit = get_units_from_prompt(original_input, self.tokenizer, perturb_word_wise=perturb_word_wise)
         unit_count = len(units)
 
         if stride is None:
@@ -158,7 +159,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             if mask.any():
                 masks.append(mask)
 
-        original_output = await self._get_chat_completion(original_input)
+        original_output = await self.get_chat_completion(original_input)
         if logger:
             logger.start_experiment(
                 original_input,
@@ -205,7 +206,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                 print("Masked out tokens/words:")
                 print(*[[perturbation.masked_string] for perturbation in perturbations], sep="\n")
             
-            outputs = await self._get_multiple_completions([perturbation.input_string for perturbation in perturbations])
+            outputs = await self.get_multiple_completions([perturbation.input_string for perturbation in perturbations])
             total_llm_calls += len(outputs)
             
             chunk_scores = []
@@ -254,9 +255,10 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             unit_attribution = np.nanmean(unit_attribution, axis=0)
             cumulative_unit_attribution += np.abs(unit_attribution)
             
-            # Calculate midrange threshold value
-            midrange_score = (np.max(cumulative_unit_attribution) + np.min(cumulative_unit_attribution)) / 2
-            if midrange_score < MIN_MIDRANGE_THRESHOLD:
+            if np.max(cumulative_unit_attribution) > MIN_MAXIMUM_THRESHOLD:
+                # Calculate midrange threshold value
+                midrange_score = (np.max(cumulative_unit_attribution) + np.min(cumulative_unit_attribution)) / 2
+            else:
                 break
             
             for mask, chunk_attribution in zip(masks, chunk_scores):
@@ -287,7 +289,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
         return pd.Series(cumulative_unit_attribution, index=units, name="saliency")
 
-    async def _get_chat_completion(self, input: str) -> StrictChoice:
+    async def get_chat_completion(self, input: str) -> StrictChoice:
         response = await self.openai_client.chat.completions.create(
             model=self.openai_model,
             messages=[{"role": "user", "content": input}],
@@ -297,6 +299,27 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             top_logprobs=20,
         )
         return StrictChoice(**response.choices[0].model_dump())
+
+    async def get_multiple_completions(self, inputs: list[str]) -> list[StrictChoice]:
+
+        tasks = [asyncio.create_task(self.get_chat_completion(inp)) for inp in inputs]
+
+        # Get the output logprobs for the perturbed inputs
+        if self.request_chunksize is not None and len(tasks) > self.request_chunksize:
+            outputs = []
+            for idx in tqdm(
+                range(0, len(tasks), self.request_chunksize),
+                desc=f"Sending {self.request_chunksize:.0f} concurrent requests at a time",
+            ):
+                batch = [
+                    tasks[i] for i in range(idx, min(idx + self.request_chunksize, len(tasks)))
+                ]
+                outputs.extend(await asyncio.gather(*batch))
+                await asyncio.sleep(REQUEST_DELAY)
+        else:
+            outputs = await asyncio.gather(*tasks)
+
+        return outputs
 
     def _make_output_location_invariant(
             self, 
@@ -349,27 +372,6 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         # Now the perturbed output contains the same tokens as the original output, but with the logprobs from the perturbed output.
         return location_invariant_output
 
-    def _get_units(self, input_text: str, perturb_word_wise: bool = False) -> tuple[list[str], list[list[str]], list[list[int]]]:
-        
-        # TODO: This should be abstracted, potentially moved to PerturbedLLMInput
-        # A unit is either a word or a single token, depending on the value of `perturb_word_wise`
-        if perturb_word_wise:
-            words = [" " + w for w in input_text.split()]
-            words[0] = words[0][1:]
-            tokens_per_unit = [self.tokenizer.tokenize(word) for word in words]
-            token_ids_per_unit = [
-                self.tokenizer.encode(word, add_special_tokens=False) for word in words
-            ]
-        else:
-            tokens_per_unit = [[token] for token in self.tokenizer.tokenize(input_text)]
-            token_ids_per_unit = [
-                [token_id] for token_id in self.tokenizer.encode(input_text, add_special_tokens=False)
-            ]
-
-        units = ["".join(tokens) for tokens in tokens_per_unit]
-
-        return units, tokens_per_unit, token_ids_per_unit
-
     def _get_scores(
             self, 
             perturbed_output: StrictChoice, 
@@ -408,24 +410,3 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         }
 
         return scores, norm_scores
-
-    async def _get_multiple_completions(self, inputs: list[str]) -> list[StrictChoice]:
-
-        tasks = [asyncio.create_task(self._get_chat_completion(inp)) for inp in inputs]
-
-        # Get the output logprobs for the perturbed inputs
-        if self.request_chunksize is not None and len(tasks) > self.request_chunksize:
-            outputs = []
-            for idx in tqdm(
-                range(0, len(tasks), self.request_chunksize),
-                desc=f"Sending {self.request_chunksize:.0f} concurrent requests at a time",
-            ):
-                batch = [
-                    tasks[i] for i in range(idx, min(idx + self.request_chunksize, len(tasks)))
-                ]
-                outputs.extend(await asyncio.gather(*batch))
-                await asyncio.sleep(REQUEST_DELAY)
-        else:
-            outputs = await asyncio.gather(*tasks)
-
-        return outputs

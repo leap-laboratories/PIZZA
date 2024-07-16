@@ -123,3 +123,47 @@ def get_increasingly_distant_token_ids(
 
     # Return the tokens at the specified positions
     return [int(sorted_tokens[pos - 1]) for pos in positions]
+
+
+def calculate_chunk_size(
+        token_count: int, 
+        fraction: Optional[float] = None, 
+        num_windows: Optional[int] = None, 
+        min_size: int=1, 
+        max_size: int=100,
+    ):
+    
+    if num_windows:
+        window_size = token_count // num_windows
+
+    elif fraction:
+        window_size = int(token_count * fraction)
+    else:
+        raise ValueError("Either 'fraction' or 'num_windows' must be specified to calculate the window size.")
+
+    return max(min_size, min(window_size, max_size))
+
+
+def get_units_from_prompt(
+        input_text: str, 
+        tokenizer: PreTrainedTokenizer, 
+        perturb_word_wise: bool = False,
+    ) -> tuple[list[str], list[list[str]], list[list[int]]]:
+    
+    # A unit is either a word or a single token, depending on the value of `perturb_word_wise`
+    if perturb_word_wise:
+        words = [" " + w for w in input_text.split()]
+        words[0] = words[0][1:]
+        tokens_per_unit = [tokenizer.tokenize(word) for word in words]
+        token_ids_per_unit = [
+            tokenizer.encode(word, add_special_tokens=False) for word in words
+        ]
+    else:
+        tokens_per_unit = [[token] for token in tokenizer.tokenize(input_text)]
+        token_ids_per_unit = [
+            [token_id] for token_id in tokenizer.encode(input_text, add_special_tokens=False)
+        ]
+
+    units = ["".join(tokens) for tokens in tokens_per_unit]
+
+    return units, tokens_per_unit, token_ids_per_unit
