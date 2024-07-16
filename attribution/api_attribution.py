@@ -55,68 +55,6 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         )
         self.request_chunksize = request_chunksize
 
-    async def _get_chat_completion(self, input: str) -> StrictChoice:
-        response = await self.openai_client.chat.completions.create(
-            model=self.openai_model,
-            messages=[{"role": "user", "content": input}],
-            temperature=0.0,
-            seed=0,
-            logprobs=True,
-            top_logprobs=20,
-        )
-        return StrictChoice(**response.choices[0].model_dump())
-
-    def _make_output_location_invariant(
-            self, 
-            original_output: StrictChoice, 
-            perturbed_output: StrictChoice,
-        ):
-        # Making a copy of the original output, so we can update it with the perturbed output log probs, wherever a token from the unperturned output is found in the perturbed output.
-        location_invariant_output = deepcopy(original_output)
-
-        # Get lists of all tokens and their logprobs (including top 20 in each output position) in the perturbed output
-        all_top_logprobs = []
-        all_tokens = []
-        for perturbed_token in perturbed_output.logprobs.content:
-            all_top_logprobs.extend(
-                [token_logprob.logprob for token_logprob in perturbed_token.top_logprobs]
-            )
-            all_tokens.extend(
-                [token_logprob.token for token_logprob in perturbed_token.top_logprobs]
-            )
-
-        # Sorting the tokens and logprobs by logprob in descending order. This is because .index gets the first occurence of a token in the list, and we want to get the highest logprob for each token.
-        sorted_indexes = sorted(
-            range(len(all_top_logprobs)), key=all_top_logprobs.__getitem__, reverse=True
-        )
-        all_tokens_sorted = [all_tokens[s] for s in sorted_indexes]
-        all_top_logprobs_sorted = [all_top_logprobs[s] for s in sorted_indexes]
-
-        # Now, for each token in the original output, if it is found in the perturbed output , update the logprob in the original output with the logprob from the perturbed output.
-        # Otherwise, set the logprob to a near zero value.
-
-        for unperturbed_token in location_invariant_output.logprobs.content:
-            if unperturbed_token.token in all_tokens_sorted:
-                perturbed_logprob = all_top_logprobs_sorted[
-                    all_tokens_sorted.index(unperturbed_token.token)
-                ]
-            else:
-                perturbed_logprob = NEAR_ZERO_PROB
-
-            # Update the main token logprob
-            unperturbed_token.logprob = perturbed_logprob
-
-            # Update the same token logprob in the top 20 logprobs (duplicate information, but for consistency with the original output structure / OpenAI format)
-            for top_logprob in unperturbed_token.top_logprobs:
-                if top_logprob.token == unperturbed_token.token:
-                    top_logprob.logprob = perturbed_logprob
-
-        # And update the message content
-        location_invariant_output.message.content = perturbed_output.message.content
-
-        # Now the perturbed output contains the same tokens as the original output, but with the logprobs from the perturbed output.
-        return location_invariant_output
-
     async def compute_attributions(
         self,
         original_input: str,
@@ -187,27 +125,6 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             
         if logger:
             logger.stop_experiment(num_llm_calls=len(outputs) + 1)
-
-    def _get_units(self, input_text: str, perturb_word_wise: bool = False) -> tuple[list[str], list[list[str]], list[list[int]]]:
-        
-        # TODO: This should be abstracted, potentially moved to PerturbedLLMInput
-        # A unit is either a word or a single token, depending on the value of `perturb_word_wise`
-        if perturb_word_wise:
-            words = [" " + w for w in input_text.split()]
-            words[0] = words[0][1:]
-            tokens_per_unit = [self.tokenizer.tokenize(word) for word in words]
-            token_ids_per_unit = [
-                self.tokenizer.encode(word, add_special_tokens=False) for word in words
-            ]
-        else:
-            tokens_per_unit = [[token] for token in self.tokenizer.tokenize(input_text)]
-            token_ids_per_unit = [
-                [token_id] for token_id in self.tokenizer.encode(input_text, add_special_tokens=False)
-            ]
-
-        units = ["".join(tokens) for tokens in tokens_per_unit]
-
-        return units, tokens_per_unit, token_ids_per_unit
 
     async def hierarchical_perturbation(
             self, 
@@ -369,6 +286,89 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             logger.stop_experiment(num_llm_calls=total_llm_calls)
 
         return pd.Series(cumulative_unit_attribution, index=units, name="saliency")
+
+    async def _get_chat_completion(self, input: str) -> StrictChoice:
+        response = await self.openai_client.chat.completions.create(
+            model=self.openai_model,
+            messages=[{"role": "user", "content": input}],
+            temperature=0.0,
+            seed=0,
+            logprobs=True,
+            top_logprobs=20,
+        )
+        return StrictChoice(**response.choices[0].model_dump())
+
+    def _make_output_location_invariant(
+            self, 
+            original_output: StrictChoice, 
+            perturbed_output: StrictChoice,
+        ):
+        # Making a copy of the original output, so we can update it with the perturbed output log probs, wherever a token from the unperturned output is found in the perturbed output.
+        location_invariant_output = deepcopy(original_output)
+
+        # Get lists of all tokens and their logprobs (including top 20 in each output position) in the perturbed output
+        all_top_logprobs = []
+        all_tokens = []
+        for perturbed_token in perturbed_output.logprobs.content:
+            all_top_logprobs.extend(
+                [token_logprob.logprob for token_logprob in perturbed_token.top_logprobs]
+            )
+            all_tokens.extend(
+                [token_logprob.token for token_logprob in perturbed_token.top_logprobs]
+            )
+
+        # Sorting the tokens and logprobs by logprob in descending order. This is because .index gets the first occurence of a token in the list, and we want to get the highest logprob for each token.
+        sorted_indexes = sorted(
+            range(len(all_top_logprobs)), key=all_top_logprobs.__getitem__, reverse=True
+        )
+        all_tokens_sorted = [all_tokens[s] for s in sorted_indexes]
+        all_top_logprobs_sorted = [all_top_logprobs[s] for s in sorted_indexes]
+
+        # Now, for each token in the original output, if it is found in the perturbed output , update the logprob in the original output with the logprob from the perturbed output.
+        # Otherwise, set the logprob to a near zero value.
+
+        for unperturbed_token in location_invariant_output.logprobs.content:
+            if unperturbed_token.token in all_tokens_sorted:
+                perturbed_logprob = all_top_logprobs_sorted[
+                    all_tokens_sorted.index(unperturbed_token.token)
+                ]
+            else:
+                perturbed_logprob = NEAR_ZERO_PROB
+
+            # Update the main token logprob
+            unperturbed_token.logprob = perturbed_logprob
+
+            # Update the same token logprob in the top 20 logprobs (duplicate information, but for consistency with the original output structure / OpenAI format)
+            for top_logprob in unperturbed_token.top_logprobs:
+                if top_logprob.token == unperturbed_token.token:
+                    top_logprob.logprob = perturbed_logprob
+
+        # And update the message content
+        location_invariant_output.message.content = perturbed_output.message.content
+
+        # Now the perturbed output contains the same tokens as the original output, but with the logprobs from the perturbed output.
+        return location_invariant_output
+
+    def _get_units(self, input_text: str, perturb_word_wise: bool = False) -> tuple[list[str], list[list[str]], list[list[int]]]:
+        
+        # TODO: This should be abstracted, potentially moved to PerturbedLLMInput
+        # A unit is either a word or a single token, depending on the value of `perturb_word_wise`
+        if perturb_word_wise:
+            words = [" " + w for w in input_text.split()]
+            words[0] = words[0][1:]
+            tokens_per_unit = [self.tokenizer.tokenize(word) for word in words]
+            token_ids_per_unit = [
+                self.tokenizer.encode(word, add_special_tokens=False) for word in words
+            ]
+        else:
+            tokens_per_unit = [[token] for token in self.tokenizer.tokenize(input_text)]
+            token_ids_per_unit = [
+                [token_id] for token_id in self.tokenizer.encode(input_text, add_special_tokens=False)
+            ]
+
+        units = ["".join(tokens) for tokens in tokens_per_unit]
+
+        return units, tokens_per_unit, token_ids_per_unit
 
     def _get_scores(
             self, 
