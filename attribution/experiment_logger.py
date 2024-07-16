@@ -85,31 +85,28 @@ class ExperimentLogger:
             num_llm_calls
         )
 
-    def log_attributions(self, perturbation: PerturbedLLMInput, attribution_scores: dict[str, Any], output: str, depth: int = 0):
+    def log_attributions(self, perturbation: PerturbedLLMInput, attribution_scores: dict[str, Any], strategy: str, output: str, depth: int = 0):
 
         for unit_token, token_id in zip(perturbation.masked_units, perturbation.unit_idx):
-            for strategy, result in attribution_scores.items():
                 
-                self.log_input_token_attribution(
+            self.log_input_token_attribution(
+                strategy,
+                token_id,
+                unit_token,
+                float(attribution_scores["sentence_attribution"]),
+            )
+
+            for j, (output_token, attr_score) in enumerate(attribution_scores["token_attribution"].items()):
+                self.log_token_attribution_matrix(
                     strategy,
                     token_id,
-                    unit_token,
-                    float(result["sentence_attribution"]),
+                    j,
+                    output_token,
+                    attr_score,
+                    perturbation.input_string,
+                    output,
+                    depth,
                 )
-
-                j = 0
-                for output_token, attr_score in result["token_attribution"].items():
-                    self.log_token_attribution_matrix(
-                        strategy,
-                        token_id,
-                        j,
-                        output_token,
-                        attr_score,
-                        perturbation.input_string,
-                        output,
-                        depth,
-                    )
-                    j += 1
 
     def log_input_token_attribution(
         self,

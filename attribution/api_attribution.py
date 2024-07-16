@@ -159,35 +159,38 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         outputs = await self.compute_attribution_chunks([perturbation.input_string for perturbation in perturbations])
         
         for perturbation, output in zip(perturbations, outputs):
-            attribution_scores, _ = self.get_scores(
-                perturbed_output=output, 
-                original_output=original_output, 
-                attribution_strategies=attribution_strategies,
-                ignore_output_token_location=ignore_output_token_location
-            )
-
-            if logger:
-                logger.log_attributions(
-                    perturbation, 
-                    attribution_scores, 
-                    output.message.content
+            for strategy in attribution_strategies:    
+                attribution_scores, _ = self.get_scores(
+                    perturbed_output=output, 
+                    original_output=original_output, 
+                    attribution_strategy=strategy,
+                    ignore_output_token_location=ignore_output_token_location
                 )
 
-                logger.log_perturbation(
-                    len(perturbation.masked_units) - 1,
-                    perturbation.masked_string,
-                    str(perturbation_strategy),
-                    original_input,
-                    original_output.message.content,
-                    perturbation.input_string,
-                    output.message.content,
-                )
+                if logger:
+                    logger.log_attributions(
+                        perturbation, 
+                        attribution_scores,
+                        strategy,
+                        output.message.content
+                    )
+
+                    logger.log_perturbation(
+                        len(perturbation.masked_units) - 1,
+                        perturbation.masked_string,
+                        str(perturbation_strategy),
+                        original_input,
+                        original_output.message.content,
+                        perturbation.input_string,
+                        output.message.content,
+                    )
             
         if logger:
             logger.stop_experiment(num_llm_calls=len(outputs) + 1)
 
     def get_units(self, input_text: str, perturb_word_wise: bool = False) -> tuple[list[str], list[list[str]], list[list[int]]]:
-
+        
+        # TODO: This should be abstracted, potentially moved to PerturbedLLMInput
         # A unit is either a word or a single token, depending on the value of `perturb_word_wise`
         if perturb_word_wise:
             words = [" " + w for w in input_text.split()]
@@ -259,6 +262,8 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                 perturbed_input = []
                 perturbed_units = []
                 for i, unit in enumerate(units):
+
+                    # TODO: Abstract and move to PerturbedLLMInput?
                     if mask[i]:
                         perturbed_unit = [
                             self.tokenizer.decode(perturbation_strategy.get_replacement_token(token_id)).strip()
@@ -288,37 +293,40 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             chunk_scores = []
             unit_attribution = np.full((len(masks), unit_count), np.nan)
             
-            i = 0
-            for perturbation, output, mask in zip(perturbations, outputs, masks):
-                attribution_scores, norm_attribution_scores = self.get_scores(
-                    perturbed_output=output, 
-                    original_output=original_output, 
-                    attribution_strategies=attribution_strategies,
-                    chunksize=sum(mask),
-                    ignore_output_token_location=ignore_output_token_location,
-                )
-
-                chunk_scores.append(attribution_scores[attribution_strategies[0]]["sentence_attribution"])
-                unit_attribution[i, mask] = norm_attribution_scores[attribution_strategies[0]]["sentence_attribution"]
-                i += 1
-
-                if logger:
-                    logger.log_attributions(
-                        perturbation,
-                        norm_attribution_scores,
-                        output.message.content,
-                        depth=stage,
+            for i, (perturbation, output, mask) in enumerate(zip(perturbations, outputs, masks)):
+                
+                for strategy in attribution_strategies:
+                    attribution_scores, norm_attribution_scores = self.get_scores(
+                        perturbed_output=output, 
+                        original_output=original_output, 
+                        attribution_strategy=strategy,
+                        chunksize=sum(mask),
+                        ignore_output_token_location=ignore_output_token_location,
                     )
 
-                    logger.log_perturbation(
-                        len(perturbation.masked_units) - 1,
-                        perturbation.masked_string,
-                        str(perturbation_strategy),
-                        original_input,
-                        original_output.message.content,
-                        perturbation.input_string,
-                        output.message.content,
-                    )
+                    if logger:
+                        logger.log_attributions(
+                            perturbation,
+                            norm_attribution_scores,
+                            strategy,
+                            output.message.content,
+                            depth=stage,
+                        )
+
+                        logger.log_perturbation(
+                            len(perturbation.masked_units) - 1,
+                            perturbation.masked_string,
+                            str(perturbation_strategy),
+                            original_input,
+                            original_output.message.content,
+                            perturbation.input_string,
+                            output.message.content,
+                        )
+                
+                    # For scoring we only use the first attribution strategy
+                    if strategy == attribution_strategies[0]:
+                        chunk_scores.append(attribution_scores["sentence_attribution"])
+                        unit_attribution[i, mask] = norm_attribution_scores["sentence_attribution"]
             
             # Filling units that were not perturbed with zeros
             unperturbed_units = np.isnan(unit_attribution).all(axis=0)
@@ -363,7 +371,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             self, 
             perturbed_output: StrictChoice, 
             original_output: StrictChoice, 
-            attribution_strategies: list[str],
+            attribution_strategy: str,
             chunksize: int = 1,
             ignore_output_token_location: bool = True,
         ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -373,31 +381,28 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                 original_output, perturbed_output
             )
         
-        scores = {}
-        norm_scores = {}
-        for attribution_strategy in attribution_strategies:
-            if attribution_strategy == "cosine":
-                token_attributions = cosine_similarity_attribution(
-                    original_output.message.content,
-                    perturbed_output.message.content,
-                    self.token_embeddings,
-                    self.tokenizer,
-                )
-            elif attribution_strategy == "prob_diff":
-                token_attributions = token_prob_attribution(
-                    original_output.logprobs, perturbed_output.logprobs
-                )
-            else:
-                raise ValueError(f"Unknown attribution strategy: {attribution_strategy}")
-            
-            scores[attribution_strategy] = {
-                "sentence_attribution": np.mean(list(token_attributions.values())),
-                "token_attribution": token_attributions
-            }
-            norm_scores[attribution_strategy] = {
-                "sentence_attribution": np.mean(list(token_attributions.values())) / chunksize,
-                "token_attribution": {k: v / chunksize for k, v in token_attributions.items()}
-            }
+        if attribution_strategy == "cosine":
+            token_attributions = cosine_similarity_attribution(
+                original_output.message.content,
+                perturbed_output.message.content,
+                self.token_embeddings,
+                self.tokenizer,
+            )
+        elif attribution_strategy == "prob_diff":
+            token_attributions = token_prob_attribution(
+                original_output.logprobs, perturbed_output.logprobs
+            )
+        else:
+            raise ValueError(f"Unknown attribution strategy: {attribution_strategy}")
+        
+        scores = {
+            "sentence_attribution": np.mean(list(token_attributions.values())),
+            "token_attribution": token_attributions
+        }
+        norm_scores = {
+            "sentence_attribution": np.mean(list(token_attributions.values())) / chunksize,
+            "token_attribution": {k: v / chunksize for k, v in token_attributions.items()}
+        }
 
         return scores, norm_scores
 
