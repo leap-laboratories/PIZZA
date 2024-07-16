@@ -128,20 +128,20 @@ def get_increasingly_distant_token_ids(
 def calculate_chunk_size(
         token_count: int, 
         fraction: Optional[float] = None, 
-        num_windows: Optional[int] = None, 
+        num_chunks: Optional[int] = None, 
         min_size: int=1, 
         max_size: int=100,
-    ):
+    ) -> int:
     
-    if num_windows:
-        window_size = token_count // num_windows
+    if num_chunks:
+        chunk_size = token_count // num_chunks
 
     elif fraction:
-        window_size = int(token_count * fraction)
+        chunk_size = int(token_count * fraction)
     else:
         raise ValueError("Either 'fraction' or 'num_windows' must be specified to calculate the window size.")
 
-    return max(min_size, min(window_size, max_size))
+    return max(min_size, min(chunk_size, max_size))
 
 
 def get_units_from_prompt(
