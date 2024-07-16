@@ -1,4 +1,5 @@
 # PIZZA
+PIZZA: an LLM Attribution Library © 2024 by Leap Laboratories is licensed under CC BY-NC-SA 4.0 
 
 `P`rompt `I`nput `Z`onal `Z`? `A`ttribution analyzer
 
