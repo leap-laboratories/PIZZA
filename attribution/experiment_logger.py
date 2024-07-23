@@ -81,14 +81,17 @@ class ExperimentLogger:
         self.df_experiments.loc[len(self.df_experiments) - 1, "duration"] = (
             time.time() - self.experiment_start_time
         )
-        self.df_experiments.loc[len(self.df_experiments) - 1, "num_llm_calls"] = (
-            num_llm_calls
-        )
+        self.df_experiments.loc[len(self.df_experiments) - 1, "num_llm_calls"] = num_llm_calls
 
-    def log_attributions(self, perturbation: PerturbedLLMInput, attribution_scores: dict[str, Any], strategy: str, output: str, depth: int = 0):
-
+    def log_attributions(
+        self,
+        perturbation: PerturbedLLMInput,
+        attribution_scores: dict[str, Any],
+        strategy: str,
+        output: str,
+        depth: int = 0,
+    ):
         for unit_token, token_id in zip(perturbation.masked_units, perturbation.unit_idx):
-                
             self.log_input_token_attribution(
                 strategy,
                 token_id,
@@ -96,7 +99,9 @@ class ExperimentLogger:
                 float(attribution_scores["sentence_attribution"]),
             )
 
-            for j, (output_token, attr_score) in enumerate(attribution_scores["token_attribution"].items()):
+            for j, (output_token, attr_score) in enumerate(
+                attribution_scores["token_attribution"].items()
+            ):
                 self.log_token_attribution_matrix(
                     strategy,
                     token_id,
@@ -298,27 +303,29 @@ class ExperimentLogger:
         print("\nPerturbed Message Table:")
         self.pretty_print(self.df_perturbations)
 
-    def format_attribution_table(self):
-        # TODO: This is out of date, assuming df_token_attr should be df_token_attribution_matrix, "token_pos" needs to be updated to either input or output token pos.
-        df_pivot = self.df_token_attr.pivot(
-            index="exp_id", columns="token_pos", values=["token", "attr_score"]
+    def format_attribution_table(self) -> pd.DataFrame:
+        df_pivot = self.df_input_token_attribution.pivot(
+            index="exp_id", columns="input_token_pos", values=["input_token", "attr_score"]
         )
         # Concatenate token and attr_score into a single string in each cell
         for pos in range(
-            df_pivot["token"].shape[1]
+            df_pivot["input_token"].shape[1]
         ):  # Assuming the number of positions is the number of columns in 'token'
             df_pivot["attr_score", pos] = pd.to_numeric(
                 df_pivot["attr_score", pos], errors="coerce"
             )
             df_pivot["attr_score", pos] = df_pivot["attr_score", pos].round(2)
-            df_pivot[f"token_{pos}"] = (
-                df_pivot["token", pos].astype(str) + "\n" + df_pivot["attr_score", pos].astype(str)
+            df_pivot[f"input_token_{pos}"] = (
+                df_pivot["input_token", pos].astype(str)
+                + "\n"
+                + df_pivot["attr_score", pos].astype(str)
             )
 
-        df_pivot = df_pivot.loc[:, df_pivot.columns.get_level_values(0).str.startswith("token_")]
+        df_pivot = df_pivot.loc[
+            :, df_pivot.columns.get_level_values(0).str.startswith("input_token_")
+        ]
         df_pivot.reset_index(inplace=True)
-        styled_df = df_pivot.style.set_properties(**{"white-space": "pre-wrap"})
-        return styled_df
+        return df_pivot
 
     def save(self, path):
         with open(os.path.join(path, "experiment_logger.pkl"), "wb") as f:

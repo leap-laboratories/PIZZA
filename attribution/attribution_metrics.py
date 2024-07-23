@@ -1,6 +1,8 @@
 import math
+from typing import cast
 
 import numpy as np
+import torch
 from openai.types.chat.chat_completion_token_logprob import TopLogprob
 from sklearn.metrics.pairwise import cosine_similarity
 from transformers import PreTrainedTokenizer
@@ -8,6 +10,7 @@ from transformers import PreTrainedTokenizer
 from .types import StrictChoiceLogprobs
 
 NEAR_ZERO_PROB = -100  # Logprob constant for near zero probability
+
 
 def token_prob_attribution(
     initial_logprobs: StrictChoiceLogprobs,
@@ -47,15 +50,24 @@ def cosine_similarity_attribution(
     tokenizer: PreTrainedTokenizer,
 ) -> dict[str, float]:
     # Extract embeddings
+    original_token_id = cast(
+        torch.Tensor,
+        tokenizer.encode(original_output_str, return_tensors="pt", add_special_tokens=False),
+    )
+    perturbed_token_id = cast(
+        torch.Tensor,
+        tokenizer.encode(perturbed_output_str, return_tensors="pt", add_special_tokens=False),
+    )
+    initial_tokens = [tokenizer.decode(t) for t in original_token_id.squeeze(dim=0)]
 
-    original_token_id = tokenizer.encode(original_output_str, return_tensors="pt", add_special_tokens=False)
-    perturbed_token_id = tokenizer.encode(perturbed_output_str, return_tensors="pt", add_special_tokens=False)
-    initial_tokens = [tokenizer.decode(t) for t in original_token_id.squeeze(axis=0)] # type: ignore
+    original_output_emb = token_embeddings[original_token_id].reshape(
+        -1, token_embeddings.shape[-1]
+    )
+    perturbed_output_emb = token_embeddings[perturbed_token_id].reshape(
+        -1, token_embeddings.shape[-1]
+    )
 
-    original_output_emb = token_embeddings[original_token_id].reshape(-1, token_embeddings.shape[-1])
-    perturbed_output_emb = token_embeddings[perturbed_token_id].reshape(-1, token_embeddings.shape[-1])
-
-    cosine_distance = 1-cosine_similarity(original_output_emb, perturbed_output_emb)
+    cosine_distance = 1 - cosine_similarity(original_output_emb, perturbed_output_emb)
     token_distance = cosine_distance.min(axis=-1)
     return {token: distance for token, distance in zip(initial_tokens, token_distance)}
 
@@ -72,7 +84,6 @@ def any_tokens_in_top_20(
     initial_logprobs: StrictChoiceLogprobs,
     new_logprobs: StrictChoiceLogprobs,
 ) -> bool:
-
     return any(
         _is_token_in_top_20(initial_token.token, new_token.top_logprobs)
         for initial_token, new_token in zip(initial_logprobs.content, new_logprobs.content)
