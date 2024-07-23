@@ -252,7 +252,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                         chunk_scores.append(attribution_scores["sentence_attribution"])
                         unit_attribution[i, mask] = norm_attribution_scores["sentence_attribution"]
 
-            # Filling units that were not perturbed with zeros
+            # Filling units that were not perturbed with zeros to avoid full nan columns
             unperturbed_units = np.isnan(unit_attribution).all(axis=0)
             unit_attribution[:, unperturbed_units] = 0
 
@@ -293,20 +293,6 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             stage += 1
 
         if logger:
-            logger.df_token_attribution_matrix = (
-                logger.df_token_attribution_matrix.drop_duplicates(
-                    subset=["exp_id", "input_token_pos", "output_token"], keep="last"
-                )
-                .sort_values(by=["input_token_pos", "output_token_pos"])
-                .reset_index(drop=True)
-            )
-            logger.df_input_token_attribution = (
-                logger.df_input_token_attribution.drop_duplicates(
-                    subset=["exp_id", "input_token_pos"], keep="last"
-                )
-                .sort_values(by="input_token_pos")
-                .reset_index(drop=True)
-            )
             logger.stop_experiment(num_llm_calls=total_llm_calls)
 
         return pd.Series(cumulative_unit_attribution, index=units, name="saliency")

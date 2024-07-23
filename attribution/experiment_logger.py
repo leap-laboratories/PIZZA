@@ -1,7 +1,7 @@
 import os
 import pickle
 import time
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 import pandas as pd
 from IPython.core.getipython import get_ipython
@@ -175,12 +175,15 @@ class ExperimentLogger:
     def clean_tokens(self, tokens):
         return [token.replace("Ġ", "") for token in tokens]
 
-    def print_sentence_attribution(self):
+    def print_sentence_attribution(self, score_agg: Literal["sum", "last"] = "sum"):
         sentences = []
 
         for (exp_id, attr_strat), exp_data in self.df_input_token_attribution.groupby(
             ["exp_id", "attribution_strategy"]
         ):
+            if exp_data["input_token_pos"].duplicated().any():
+                exp_data = self._aggregate_attr_score_df(exp_data, score_agg)
+
             tokens = self.clean_tokens(exp_data["input_token"].tolist())
             attr_scores = exp_data["attr_score"].tolist()
 
@@ -213,6 +216,7 @@ class ExperimentLogger:
         exp_id: int,
         attribution_strategy: Optional[str] = None,
         show_debug_cols: bool = False,
+        score_agg: Literal["sum", "last"] = "sum",
     ):
         if attribution_strategy is None:
             unique_strategies = self.df_token_attribution_matrix["attribution_strategy"].unique()
@@ -221,13 +225,25 @@ class ExperimentLogger:
                     exp_id,
                     attribution_strategy=strategy,
                     show_debug_cols=show_debug_cols,
+                    score_agg=score_agg,
                 )
         else:
-            # Filter the data for the specific experiment and attribution strategy
+            # Filter the experiment and token data for the specific experiment and attribution strategy
             exp_data = self.df_token_attribution_matrix[
                 (self.df_token_attribution_matrix["exp_id"] == exp_id)
                 & (self.df_token_attribution_matrix["attribution_strategy"] == attribution_strategy)
             ]
+
+            token_data = self.df_input_token_attribution[
+                (self.df_input_token_attribution["exp_id"] == exp_id)
+                & (self.df_input_token_attribution["attribution_strategy"] == attribution_strategy)
+            ]
+
+            is_hierarchical = exp_data["depth"].any()
+            if is_hierarchical:
+                exp_data = self._aggregate_attr_score_df(exp_data, score_agg)
+                token_data = self._aggregate_attr_score_df(token_data, score_agg)
+
             perturbation_strategy = self.df_experiments.loc[
                 self.df_experiments["exp_id"] == exp_id, "perturbation_strategy"
             ].values[0]
@@ -238,15 +254,7 @@ class ExperimentLogger:
             )
 
             # Retrieve and clean tokens
-            input_tokens = self.clean_tokens(
-                self.df_input_token_attribution[
-                    (self.df_input_token_attribution["exp_id"] == exp_id)
-                    & (
-                        self.df_input_token_attribution["attribution_strategy"]
-                        == attribution_strategy
-                    )
-                ]["input_token"].tolist()
-            )
+            input_tokens = self.clean_tokens(token_data["input_token"].tolist())
 
             output_tokens = self.clean_tokens(
                 exp_data.loc[exp_data["input_token_pos"] == 0, "output_token"].tolist()
@@ -262,6 +270,10 @@ class ExperimentLogger:
             # Set the row and column names of the matrix
             matrix.index = input_tokens_with_pos
             matrix.columns = output_tokens_with_pos
+
+            if is_hierarchical:
+                # Output is a saliency map which is depth dependent, so normalize the values
+                matrix = matrix / matrix.abs().sum().replace(0, 1)
 
             print(
                 f"Attribution matrix for experiment {exp_id} \nAttribution Strategy: {attribution_strategy} \nPerturbation strategy: {perturbation_strategy}:"
@@ -326,6 +338,33 @@ class ExperimentLogger:
         ]
         df_pivot.reset_index(inplace=True)
         return df_pivot
+
+    def _aggregate_attr_score_df(
+        self, df: pd.DataFrame, score_agg: Literal["sum", "last"]
+    ) -> pd.DataFrame:
+        """
+        Aggregate duplicate perturbed tokens, only relevant for hierarchical perturbation methods
+        df: DataFrame containing the token attribution scores (generally one of the attribution tables)
+        score_agg: Method to aggregate the scores, either "sum" with produces a saliency map, or "last" which gives scores similar to the non-hierarchical method
+        """
+
+        aggregation_dict = dict.fromkeys(df.columns, "last")
+        aggregation_dict.update({"attr_score": score_agg})
+        aggregation_dict.pop("input_token_pos")
+
+        groupby_columns = ["input_token_pos"]
+        if "output_token_pos" in df.columns:
+            aggregation_dict.pop("output_token_pos")
+            groupby_columns.append("output_token_pos")
+
+        df = (
+            df.groupby(groupby_columns)
+            .agg(aggregation_dict)
+            .sort_values(by=groupby_columns)
+            .reset_index()
+        )
+
+        return df
 
     def save(self, path):
         with open(os.path.join(path, "experiment_logger.pkl"), "wb") as f:
