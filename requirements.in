@@ -5,4 +5,4 @@ python-dotenv==1.0.1
 rich==13.7.1
 scikit-learn==1.4.2
 torch==2.2.1
-transformers==4.39.0
+transformers==4.43.1
