@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Any, Optional, cast
 
 import numpy as np
+import numpy.typing as npt
 import openai
 import pandas as pd
 from dotenv import load_dotenv
@@ -43,7 +44,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         openai_api_key: Optional[str] = None,
         tokenizer: Optional[PreTrainedTokenizer] = None,
         token_embeddings: Optional[np.ndarray] = None,
-        request_chunksize: Optional[int] = 50,
+        max_concurrent_requests: Optional[int] = 50,
     ):
         openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
         self.openai_client = openai.AsyncOpenAI(api_key=openai_api_key)
@@ -56,7 +57,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             .transformer.wte.weight.detach()
             .numpy()
         )
-        self.request_chunksize = request_chunksize
+        self.max_concurrent_requests = max_concurrent_requests
 
     async def compute_attributions(
         self,
@@ -134,13 +135,13 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         self,
         original_input: str,
         init_chunk_size: int,
-        threshold: float = 0.5,
         stride: Optional[int] = None,
-        logger: Optional[ExperimentLogger] = None,
         perturbation_strategy: PerturbationStrategy = FixedPerturbationStrategy(),
         attribution_strategies: list[str] = ["cosine", "prob_diff"],
+        static_threshold: Optional[float] = None,
         perturb_word_wise: bool = False,
         ignore_output_token_location: bool = True,
+        logger: Optional[ExperimentLogger] = None,
         verbose: bool = False,
     ) -> pd.Series:
         units, _, ids_per_unit = get_units_from_prompt(
@@ -152,9 +153,8 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             stride = init_chunk_size
 
         padding = stride // 2
-
         # TODO: Abstract to create_masks function/method
-        masks = []
+        masks: list[npt.NDArray[np.bool_]] = []
         for start in range(-padding, unit_count + padding, stride):
             end = min(start + init_chunk_size, unit_count)
             mask = np.zeros(unit_count, dtype=bool)
@@ -273,7 +273,10 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
                 if (
                     cumulative_chunk_attribution >= midrange_score
-                    or np.abs(chunk_attribution) > threshold
+                    or (
+                        static_threshold is not None
+                        and np.abs(chunk_attribution) > static_threshold
+                    )
                 ) and mask.sum() > 1:
                     # Split the chunk in half
                     indices = np.where(mask)[0]
@@ -312,14 +315,15 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         tasks = [asyncio.create_task(self.get_chat_completion(inp)) for inp in inputs]
 
         # Get the output logprobs for the perturbed inputs
-        if self.request_chunksize is not None and len(tasks) > self.request_chunksize:
+        if self.max_concurrent_requests is not None and len(tasks) > self.max_concurrent_requests:
             outputs = []
             for idx in tqdm(
-                range(0, len(tasks), self.request_chunksize),
-                desc=f"Sending {self.request_chunksize:.0f} concurrent requests at a time",
+                range(0, len(tasks), self.max_concurrent_requests),
+                desc=f"Sending {self.max_concurrent_requests:.0f} concurrent requests at a time",
             ):
                 batch = [
-                    tasks[i] for i in range(idx, min(idx + self.request_chunksize, len(tasks)))
+                    tasks[i]
+                    for i in range(idx, min(idx + self.max_concurrent_requests, len(tasks)))
                 ]
                 outputs.extend(await asyncio.gather(*batch))
                 await asyncio.sleep(REQUEST_DELAY)

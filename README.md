@@ -39,21 +39,31 @@ and local LLMs:
 
 ## Quickstart
 
-Attrubution via OpenAI's API:
+### Attribution via OpenAI's API
 
 **!!! This will use API credits !!!**
 
+The `OpenAIAttributor` is asynchronous and will make multiple requests concurrently, so make sure to check your OpenAI limits and set `max_concurrent_requests` accordingly.
+
+#### Perturbing each token individually
+
 ```python
+import asyncio
+
 from attribution.api_attribution import OpenAIAttributor
 from attribution.experiment_logger import ExperimentLogger
 from attribution.token_perturbation import NthNearestPerturbationStrategy
 
 # set your "OPENAI_API_KEY" environment variable to your openai API key, or pass it here:
-attributor = OpenAIAttributor(openai_api_key=YOUR_OPENAI_API_KEY)
+attributor = OpenAIAttributor(
+    openai_api_key=YOUR_OPENAI_API_KEY,
+    max_concurrent_requests=5,
+)
+
 logger = ExperimentLogger()
 
 input_text = "The clock shows 9:47 PM. How many minutes 'til 10?"
-attributor.compute_attributions(
+attribution_task = attributor.compute_attributions(
     input_text,
     perturbation_strategy=NthNearestPerturbationStrategy(n=-1),
     attribution_strategies=["cosine", "prob_diff"],
@@ -61,12 +71,49 @@ attributor.compute_attributions(
     perturb_word_wise=True,
 )
 
+asyncio.run(attribution_task)
+
 logger.print_sentence_attribution()
 logger.print_attribution_matrix(exp_id=1)
 
 ```
 
-Example of gradient-based attrubution using gemma-2b locally:
+#### Using hierarchical perturbation
+
+```python
+import asyncio
+
+from attribution.api_attribution import OpenAIAttributor
+from attribution.experiment_logger import ExperimentLogger
+from attribution.token_perturbation import FixedPerturbationStrategy
+
+attributor = OpenAIAttributor(
+    openai_api_key=YOUR_OPENAI_API_KEY,
+    max_concurrent_requests=5,
+)
+
+logger = ExperimentLogger()
+
+input_text = "The clock shows 9:47 PM. How many minutes 'til 10?"
+attribution_task = attributor.hierarchical_perturbation(
+    input_text,
+    init_chunk_size=4,
+    perturbation_strategy=FixedPerturbationStrategy(),
+    attribution_strategies=["cosine", "prob_diff"],
+    static_threshold=0.5,
+    logger=logger,
+    perturb_word_wise=True,
+)
+
+asyncio.run(attribution_task)
+
+logger.print_sentence_attribution()
+logger.print_attribution_matrix(exp_id=1)
+```
+
+### Local attribution
+
+#### Using gradient-based attribution for gemma-2b
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -91,7 +138,7 @@ attributor.print_attributions(
 )
 ```
 
-Usage examples can be found in the `examples/` folder.
+More usage examples can be found in the `examples/` folder.
 
 ## Requirements
 
@@ -207,7 +254,11 @@ local_attributor.cleanup()
 
 ### OpenAIAttributor
 
+#### Attribution methods
+
 `OpenAIAttributor` uses the OpenAI API to compute attributions. Given that gradients are not accessible, the attributor perturbs the input with a given `PerturbationStrategy` and measures the magnitude of change of the generated output with an `attribution_strategy`.
+
+There are two methods for computing attributions in the `OpenAIAttributor`: `compute_attributions` and `hierarchical_perturbation`.
 
 The `compute_attributions` method:
 
@@ -215,6 +266,22 @@ The `compute_attributions` method:
 2. Uses a `PerturbationStrategy` to modify the input prompt, and sends the perturbed input to OpenAI's API to generate a perturbed output. Each token of the input prompt is perturbed separately, to obtain an attribution score for each input token.
 3. Uses an `attribution_strategy` to compute the magnitude of change between the original and perturbed output.
 4. Logs attribution scores to an `ExperimentLogger` if passed.
+
+The `hierarchical_perturbation` method is designed to reduce the number of API calls by perturbation larger chunks of the input prompt initially, and narrowing its search only on the chunks which have a large impact on the output (high attribution score).
+
+The flow is similar to that of `compute_attributions`, but using an iterative technique that works as follows:
+
+1. The prompt is split into chunks defined by `init_chunk_size` and `stride` (optional).
+2. The chunks are perturbed, sent to the API, and scores are calculated/logged as described above.
+3. Thresholds are used to determine which chunks should be further processed based on the chunk attribution scores.
+4. Chunks are subdivided, and the process returns to step 2 until none of the processed chunks exceed the thresholds *or* no further subdivision is possible.
+
+There are currently two thresholds that define whether a chunk should be processed further:
+
+1. Dynamic threshold: here a *cumulative* attribution is defined per token which is incremented every step by the chunk(s) containing a given token. The threshold is then defined as the midrange of these token attributions.
+2. Static threshold: for each chunk at a given step in the process, the overall attribution score is compared to a set threshold, defined by the input argument `static_threshold` (`Optional[float]`), depending on the attribution metric used. For example, `static_threshold=0.5` could be a reasonable input for the probability difference attribution method.
+
+Note if more than one `attribution_strategies` are passed, only the first will be used in threshold calculations and comparison.
 
 **Initialization Parameters:**
 
