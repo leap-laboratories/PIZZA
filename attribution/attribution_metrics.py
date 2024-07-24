@@ -49,7 +49,7 @@ def cosine_similarity_attribution(
 
     original_token_id = tokenizer.encode(original_output_str, return_tensors="pt", add_special_tokens=False)
     perturbed_token_id = tokenizer.encode(perturbed_output_str, return_tensors="pt", add_special_tokens=False)
-    initial_tokens = [tokenizer.decode(t) for t in original_token_id.squeeze(axis=0)]
+    initial_tokens = [tokenizer.decode(t, skip_special_tokens=True) for t in original_token_id.squeeze(axis=0)]
 
     original_output_emb = token_embeddings[original_token_id].reshape(-1, token_embeddings.shape[-1])
     perturbed_output_emb = token_embeddings[perturbed_token_id].reshape(-1, token_embeddings.shape[-1])

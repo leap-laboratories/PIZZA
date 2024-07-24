@@ -2,12 +2,13 @@ import os
 import pickle
 import time
 from typing import Optional
-
+from IPython.display import HTML
 import pandas as pd
 from IPython.core.getipython import get_ipython
 
 from .token_perturbation import PerturbationStrategy
-
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 
 class ExperimentLogger:
     def __init__(self, experiment_id=0):
@@ -137,14 +138,108 @@ class ExperimentLogger:
         }
 
     def clean_tokens(self, tokens):
-        return [token.replace("Ġ", "") for token in tokens]
+        return [token.replace("Ġ", " ") for token in tokens]
 
-    def print_sentence_attribution(self):
-        sentences = []
 
-        for (exp_id, attr_strat), exp_data in self.df_input_token_attribution.groupby(
-            ["exp_id", "attribution_strategy"]
-        ):
+    def score_to_color(self, score, vmin=-1, vmax=1):
+        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+        cmap = plt.cm.coolwarm
+        rgba_color = cmap(norm(score))
+        color_hex = mcolors.to_hex(rgba_color)
+        return color_hex
+
+    def print_text_total_attribution(self, exp_id: Optional[int] = None):
+
+        if exp_id == -1:
+            exp_id = self.df_experiments["exp_id"].max()
+
+        token_attrs_df = self.df_input_token_attribution.groupby(
+            ["exp_id", "attribution_strategy"]) if exp_id is None else self.df_input_token_attribution[self.df_input_token_attribution["exp_id"] == exp_id].groupby(
+            ["exp_id", "attribution_strategy"])
+
+        for (exp_id, attr_strat), exp_data in token_attrs_df:
+            tokens = self.clean_tokens(exp_data["input_token"].tolist())
+            attr_scores = exp_data["attr_score"].tolist()
+
+            token_dict = {f"token_{i+1}": t for i, t in enumerate(tokens)}
+            score_dict = {f"token_{i+1}": score for i, score in enumerate(attr_scores)}
+
+            output = self.df_experiments.loc[
+                self.df_experiments["exp_id"] == exp_id, "original_output"
+            ].values[0]
+
+            df = pd.DataFrame([token_dict, score_dict], index=["token", "attr_score"])
+
+            # Generating HTML
+            html_str = '<div style="font-family: monospace;">'
+            for col in df.columns:
+                token = df[col]["token"]
+                score = df[col]["attr_score"]
+                color = self.score_to_color(score)
+                html_str += f'<span style="text-decoration: underline; text-decoration-color: {color}; text-decoration-thickness: 4px;">{token}</span>'
+
+
+            html_str += f' -> <b>{output}</b>'     
+            html_str += '</div>'
+
+            # Display
+            
+            if get_ipython() and "IPKernelApp" in get_ipython().config:
+                from IPython.display import display
+                display(HTML(html_str))
+            else:
+                print(df)
+
+
+    def print_text_attribution_matrix(self, exp_id: int = -1):
+
+        if exp_id == -1:
+            exp_id = self.df_experiments["exp_id"].max()
+
+        matrix = self.get_attribution_matrix(exp_id)
+
+        input_tokens = [' '.join(x.split(' ')[:-1]) for x in matrix.index]
+        token_dict = {f"token_{i+1}": t for i, t in enumerate(input_tokens)}
+
+        for oi, output_token in enumerate(matrix.columns):
+            prev_output_str = ''.join([' '.join(ot.split(' ')[:-1]) for ot in matrix.columns[:oi]])
+            following_output_str = ''.join([' '.join(ot.split(' ')[:-1]) for ot in matrix.columns[oi+1:]])
+            attr_scores = matrix[output_token].tolist()
+            score_dict = {f"token_{i+1}": score for i, score in enumerate(attr_scores)}
+
+            df = pd.DataFrame([token_dict, score_dict], index=["token", "attr_score"])
+            
+            # Generating HTML
+            html_str = '<div style="font-family: monospace;">'
+            for col in df.columns:
+                token = df[col]["token"]
+                score = df[col]["attr_score"]
+                color = self.score_to_color(score)
+                html_str += f'<span style="text-decoration: underline; text-decoration-color: {color}; text-decoration-thickness: 4px;">{token}</span>'
+
+            clean_output_token = ' '.join(output_token.split(' ')[:-1])
+            html_str += f' -> {prev_output_str}<b>{clean_output_token}</b>{following_output_str}'     
+            html_str += '</div>'
+
+            # Display
+            
+            if get_ipython() and "IPKernelApp" in get_ipython().config:
+                from IPython.display import display
+                display(HTML(html_str))
+            else:
+                print(df)
+
+
+    def print_total_attribution(self, exp_id: Optional[int] = None):
+        totals = []
+        if exp_id == -1:
+            exp_id = self.df_experiments["exp_id"].max()
+
+        token_attrs_df = self.df_input_token_attribution.groupby(
+            ["exp_id", "attribution_strategy"]) if exp_id is None else self.df_input_token_attribution[self.df_input_token_attribution["exp_id"] == exp_id].groupby(
+            ["exp_id", "attribution_strategy"])
+
+        for (exp_id, attr_strat), exp_data in token_attrs_df:
             tokens = self.clean_tokens(exp_data["input_token"].tolist())
             attr_scores = exp_data["attr_score"].tolist()
 
@@ -157,44 +252,58 @@ class ExperimentLogger:
                 self.df_experiments["exp_id"] == exp_id, "perturb_word_wise"
             ].values[0]
 
-            sentence_data = {
+            total_data = {
                 "exp_id": exp_id,
                 "attribution_strategy": attr_strat,
                 "perturbation_strategy": perturbation_strategy,
                 "perturb_word_wise": perturb_word_wise,
             }
-            sentence_data.update(
+            total_data.update(
                 {f"token_{i+1}": token_attr for i, token_attr in enumerate(token_attrs)}
             )
+            totals.append(total_data)
 
-            sentences.append(sentence_data)
-
-        df_sentences = pd.DataFrame(sentences)
-        self.pretty_print(df_sentences)
+        df_totals = pd.DataFrame(totals)
+        self.pretty_print(df_totals)
 
     def print_attribution_matrix(
         self,
-        exp_id: int,
+        exp_id: int = -1,
         attribution_strategy: Optional[str] = None,
         show_debug_cols: bool = False,
     ):
-        if attribution_strategy is None:
-            unique_strategies = self.df_token_attribution_matrix["attribution_strategy"].unique()
-            for strategy in unique_strategies:
-                self.print_attribution_matrix(
-                    exp_id,
-                    attribution_strategy=strategy,
-                    show_debug_cols=show_debug_cols,
-                )
+        if exp_id == -1:
+            exp_id = self.df_experiments["exp_id"].max()
+        matrix = self.get_attribution_matrix(exp_id, attribution_strategy, show_debug_cols)
+
+        if get_ipython() and "IPKernelApp" in get_ipython().config:
+            from IPython.display import display
+            display(matrix.style.background_gradient(cmap="coolwarm", vmin=-1, vmax=1))
         else:
+            print(matrix)
+
+    def get_attribution_matrix(
+        self,
+        exp_id: int = -1,
+        attribution_strategy: Optional[str] = None,
+        show_debug_cols: bool = False,
+    ):
+        if exp_id == -1:
+            exp_id = self.df_experiments["exp_id"].max()
+
+        if attribution_strategy is None:
+            strategies = self.df_token_attribution_matrix[(self.df_token_attribution_matrix["exp_id"] == exp_id)]["attribution_strategy"].unique()
+        else:
+            strategies = [attribution_strategy]
+
+        matrices = []
+        for attribution_strategy in strategies:
+                
             # Filter the data for the specific experiment and attribution strategy
             exp_data = self.df_token_attribution_matrix[
                 (self.df_token_attribution_matrix["exp_id"] == exp_id)
                 & (self.df_token_attribution_matrix["attribution_strategy"] == attribution_strategy)
             ]
-            perturbation_strategy = self.df_experiments.loc[
-                self.df_experiments["exp_id"] == exp_id, "perturbation_strategy"
-            ].values[0]
 
             # Create the pivot table for the matrix
             matrix = exp_data.pivot(
@@ -227,11 +336,6 @@ class ExperimentLogger:
             matrix.index = input_tokens_with_pos
             matrix.columns = output_tokens_with_pos
 
-            print(
-                f"Attribution matrix for experiment {exp_id} \nAttribution Strategy: {attribution_strategy} \nPerturbation strategy: {perturbation_strategy}:"
-            )
-            print("Input Tokens (Rows) vs. Output Tokens (Columns)")
-
             if show_debug_cols:
                 additional_columns = exp_data[
                     ["input_token_pos", "perturbed_input", "perturbed_output"]
@@ -243,12 +347,9 @@ class ExperimentLogger:
                 )
                 additional_columns = additional_columns[["perturbed_input", "perturbed_output"]]
                 matrix = matrix.join(additional_columns)
-            if get_ipython() and "IPKernelApp" in get_ipython().config:
-                from IPython.display import display
-
-                display(matrix.style.background_gradient(cmap="coolwarm", vmin=-1, vmax=1))
-            else:
-                print(matrix)
+            
+            matrices.append(matrix)
+        return pd.concat(matrices)
 
     def pretty_print(self, df: pd.DataFrame):
         # Check if code is running in Jupyter notebook

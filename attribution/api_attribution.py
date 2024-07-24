@@ -199,7 +199,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
             for attribution_strategy in attribution_strategies:
                 if attribution_strategy == "cosine":
-                    sentence_attr, attributed_tokens, token_attributions = (
+                    total_attr, attributed_tokens, token_attributions = (
                         cosine_similarity_attribution(
                             original_output.message.content,
                             perturbed_output.message.content,
@@ -208,7 +208,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                         )
                     )
                 elif attribution_strategy == "prob_diff":
-                    sentence_attr, attributed_tokens, token_attributions = token_prob_attribution(
+                    total_attr, attributed_tokens, token_attributions = token_prob_attribution(
                         original_output.logprobs, perturbed_output.logprobs
                     )
                 else:
@@ -220,7 +220,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                             attribution_strategy,
                             unit_offset + i,
                             unit_token,
-                            float(sentence_attr),
+                            float(total_attr),
                         )
                         for j, attr_score in enumerate(token_attributions):
                             logger.log_token_attribution_matrix(
