@@ -6,7 +6,7 @@ from typing import Any, Literal, Optional
 import pandas as pd
 from IPython.core.getipython import get_ipython
 
-from .token_perturbation import PerturbationStrategy, PerturbedLLMInput
+from .token_perturbation import PerturbationStrategy, PerturbedLLMInput, combine_unit
 
 
 class ExperimentLogger:
@@ -95,7 +95,7 @@ class ExperimentLogger:
             self.log_input_token_attribution(
                 strategy,
                 token_id,
-                unit_token,
+                combine_unit(unit_token),
                 float(attribution_scores["sentence_attribution"]),
             )
 
@@ -108,7 +108,7 @@ class ExperimentLogger:
                     j,
                     output_token,
                     attr_score,
-                    perturbation.input_string,
+                    perturbation.perturbed_string,
                     output,
                     depth,
                 )

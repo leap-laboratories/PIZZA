@@ -2,29 +2,9 @@ from functools import cached_property
 from typing import List, Optional
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, computed_field
+import numpy.typing as npt
 from sklearn.neighbors import NearestNeighbors
 from transformers import GPT2LMHeadModel, GPT2Tokenizer, PreTrainedTokenizer
-
-
-class PerturbedLLMInput(BaseModel):
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    input_units: list[list[str]]
-    masked_units: list[str]
-    unit_idx: list[int]
-    tokenizer: PreTrainedTokenizer
-
-    @computed_field
-    @cached_property
-    def input_string(self) -> str:
-        return self.tokenizer.convert_tokens_to_string(["".join(unit) for unit in self.input_units])
-
-    @computed_field
-    @cached_property
-    def masked_string(self) -> str:
-        return self.tokenizer.convert_tokens_to_string(self.masked_units).strip()
 
 
 class PerturbationStrategy:
@@ -63,6 +43,66 @@ class NthNearestPerturbationStrategy(PerturbationStrategy):
 
     def __str__(self):
         return f"nth_nearest (n={self.n})"
+
+
+class PerturbedLLMInput:
+    input_units: list[list[str]]
+    input_unit_ids: list[list[int]]
+    unit_idx: list[int]
+    tokenizer: PreTrainedTokenizer
+    strategy: PerturbationStrategy
+    perturb_word_wise: bool = False
+    perturbed_units: list[list[str]]
+    masked_units: list[list[str]]
+
+    def __init__(
+        self,
+        input_units: list[list[str]],
+        input_unit_ids: list[list[int]],
+        unit_idx: list[int],
+        tokenizer: PreTrainedTokenizer,
+        strategy: PerturbationStrategy,
+        perturb_word_wise: bool = False,
+    ):
+        self.input_units = input_units
+        self.input_unit_ids = input_unit_ids
+        self.unit_idx = unit_idx
+        self.tokenizer = tokenizer
+        self.strategy = strategy
+        self.perturb_word_wise = perturb_word_wise
+
+        self.perturbed_units, self.masked_units = self.get_pertrubation()
+
+    @cached_property
+    def input_string(self) -> str:
+        units = combine_units(self.input_units)
+        return self.tokenizer.convert_tokens_to_string(units).strip()
+
+    @cached_property
+    def masked_string(self) -> str:
+        units = combine_units(self.masked_units)
+        return self.tokenizer.convert_tokens_to_string(units).strip()
+
+    @cached_property
+    def perturbed_string(self) -> str:
+        units = combine_units(self.perturbed_units)
+        return self.tokenizer.convert_tokens_to_string(units).strip()
+
+    def get_pertrubation(self):
+        perturbed_units = []
+        masked_units = []
+        for i, unit in enumerate(self.input_units):
+            if i in self.unit_idx:
+                perturbed_tokens = [
+                    self.tokenizer.decode(self.strategy.get_replacement_token(token_id)).strip()
+                    for token_id in self.input_unit_ids[i]
+                ]
+                perturbed_units.append(combine_unit(perturbed_tokens))
+                masked_units.append(unit)
+            else:
+                perturbed_units.append(unit)
+
+        return perturbed_units, masked_units
 
 
 def sort_tokens_by_similarity(
@@ -126,44 +166,80 @@ def get_increasingly_distant_token_ids(
 
 
 def calculate_chunk_size(
-        token_count: int, 
-        fraction: Optional[float] = None, 
-        num_chunks: Optional[int] = None, 
-        min_size: int=1, 
-        max_size: int=100,
-    ) -> int:
-    
+    token_count: int,
+    fraction: Optional[float] = None,
+    num_chunks: Optional[int] = None,
+    min_size: int = 1,
+    max_size: int = 100,
+) -> int:
     if num_chunks:
         chunk_size = token_count // num_chunks
 
     elif fraction:
         chunk_size = int(token_count * fraction)
     else:
-        raise ValueError("Either 'fraction' or 'num_windows' must be specified to calculate the window size.")
+        raise ValueError(
+            "Either 'fraction' or 'num_windows' must be specified to calculate the window size."
+        )
 
     return max(min_size, min(chunk_size, max_size))
 
 
 def get_units_from_prompt(
-        input_text: str, 
-        tokenizer: PreTrainedTokenizer, 
-        perturb_word_wise: bool = False,
-    ) -> tuple[list[str], list[list[str]], list[list[int]]]:
-    
+    input_text: str,
+    tokenizer: PreTrainedTokenizer,
+    perturb_word_wise: bool = False,
+) -> tuple[list[list[str]], list[list[int]]]:
     # A unit is either a word or a single token, depending on the value of `perturb_word_wise`
     if perturb_word_wise:
         words = [" " + w for w in input_text.split()]
         words[0] = words[0][1:]
         tokens_per_unit = [tokenizer.tokenize(word) for word in words]
-        token_ids_per_unit = [
-            tokenizer.encode(word, add_special_tokens=False) for word in words
-        ]
+        token_ids_per_unit = [tokenizer.encode(word, add_special_tokens=False) for word in words]
     else:
         tokens_per_unit = [[token] for token in tokenizer.tokenize(input_text)]
         token_ids_per_unit = [
             [token_id] for token_id in tokenizer.encode(input_text, add_special_tokens=False)
         ]
 
-    units = ["".join(tokens) for tokens in tokens_per_unit]
+    return tokens_per_unit, token_ids_per_unit
 
-    return units, tokens_per_unit, token_ids_per_unit
+
+def combine_units(unit_tokens: list[list[str]]) -> list[str]:
+    return [combine_unit(tokens) for tokens in unit_tokens]
+
+
+def combine_unit(tokens: list[str]) -> str:
+    return "".join(tokens)
+
+
+def get_masks(
+    input_size: int, init_chunk_size: int, stride: Optional[int] = None
+) -> list[npt.NDArray[np.bool_]]:
+    if stride is None:
+        stride = init_chunk_size
+
+    padding = stride // 2
+    masks: list[npt.NDArray[np.bool_]] = []
+    for start in range(-padding, input_size + padding, stride):
+        end = min(start + init_chunk_size, input_size)
+        mask = np.zeros(input_size, dtype=bool)
+        mask[max(start, 0) : min(end, input_size)] = True
+
+        if mask.any():
+            masks.append(mask)
+
+    return masks
+
+
+def split_mask(mask: npt.NDArray[np.bool_]) -> tuple[npt.NDArray[np.bool_], npt.NDArray[np.bool_]]:
+    indices = np.where(mask)[0]
+    mid = len(indices) // 2
+
+    mask1 = np.zeros_like(mask, dtype=bool)
+    mask2 = np.zeros_like(mask, dtype=bool)
+
+    mask1[indices[:mid]] = True
+    mask2[indices[mid:]] = True
+
+    return mask1, mask2

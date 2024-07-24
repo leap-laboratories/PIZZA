@@ -4,7 +4,6 @@ from copy import deepcopy
 from typing import Any, Optional, cast
 
 import numpy as np
-import numpy.typing as npt
 import openai
 import pandas as pd
 from dotenv import load_dotenv
@@ -26,7 +25,10 @@ from .token_perturbation import (
     FixedPerturbationStrategy,
     PerturbationStrategy,
     PerturbedLLMInput,
+    combine_units,
+    get_masks,
     get_units_from_prompt,
+    split_mask,
 )
 from .types import StrictChoice
 
@@ -77,56 +79,35 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                 perturbation_strategy,
                 perturb_word_wise,
             )
-
-        units, tokens_per_unit, ids_per_unit = get_units_from_prompt(
-            original_input, self.tokenizer, perturb_word_wise=perturb_word_wise
+        unit_tokens, unit_token_ids = get_units_from_prompt(
+            original_input, self.tokenizer, perturb_word_wise
         )
-
         perturbations: list[PerturbedLLMInput] = []
-        for i_unit, unit in enumerate(units):
-            perturbed_unit = [
-                self.tokenizer.decode(perturbation_strategy.get_replacement_token(token_id)).strip()
-                for token_id in ids_per_unit[i_unit]
-            ]
-
-            perturbed_input = deepcopy(tokens_per_unit)
-            perturbed_input[i_unit] = perturbed_unit
-
+        for i_unit in range(len(unit_tokens)):
             perturbation = PerturbedLLMInput(
-                input_units=perturbed_input,
-                masked_units=[unit],
+                input_units=unit_tokens,
+                input_unit_ids=unit_token_ids,
                 unit_idx=[i_unit],
                 tokenizer=self.tokenizer,
+                strategy=perturbation_strategy,
+                perturb_word_wise=perturb_word_wise,
             )
             perturbations.append(perturbation)
 
         outputs = await self.get_multiple_completions(
-            [perturbation.input_string for perturbation in perturbations]
+            [perturbation.perturbed_string for perturbation in perturbations]
         )
 
         for perturbation, output in zip(perturbations, outputs):
             for strategy in attribution_strategies:
-                attribution_scores, _ = self._get_scores(
+                _ = self._get_scores(
+                    perturbation=perturbation,
                     perturbed_output=output,
                     original_output=original_output,
                     attribution_strategy=strategy,
                     ignore_output_token_location=ignore_output_token_location,
+                    logger=logger,
                 )
-
-                if logger:
-                    logger.log_attributions(
-                        perturbation, attribution_scores, strategy, output.message.content
-                    )
-
-                    logger.log_perturbation(
-                        len(perturbation.masked_units) - 1,
-                        perturbation.masked_string,
-                        str(perturbation_strategy),
-                        original_input,
-                        original_output.message.content,
-                        perturbation.input_string,
-                        output.message.content,
-                    )
 
         if logger:
             logger.stop_experiment(num_llm_calls=len(outputs) + 1)
@@ -144,24 +125,10 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         logger: Optional[ExperimentLogger] = None,
         verbose: bool = False,
     ) -> pd.Series:
-        units, _, ids_per_unit = get_units_from_prompt(
+        unit_tokens, unit_token_ids = get_units_from_prompt(
             original_input, self.tokenizer, perturb_word_wise=perturb_word_wise
         )
-        unit_count = len(units)
-
-        if stride is None:
-            stride = init_chunk_size
-
-        padding = stride // 2
-        # TODO: Abstract to create_masks function/method
-        masks: list[npt.NDArray[np.bool_]] = []
-        for start in range(-padding, unit_count + padding, stride):
-            end = min(start + init_chunk_size, unit_count)
-            mask = np.zeros(unit_count, dtype=bool)
-            mask[max(start, 0) : min(end, unit_count)] = True
-
-            if mask.any():
-                masks.append(mask)
+        units = combine_units(unit_tokens)
 
         original_output = await self.get_chat_completion(original_input)
         if logger:
@@ -172,6 +139,8 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                 perturb_word_wise,
             )
 
+        unit_count = len(units)
+        masks = get_masks(unit_count, init_chunk_size, stride)
         cumulative_unit_attribution = np.zeros(unit_count)
         total_llm_calls = 1
         stage = 0
@@ -181,27 +150,13 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             new_masks = []
             perturbations: list[PerturbedLLMInput] = []
             for mask in masks:
-                perturbed_input = []
-                perturbed_units = []
-                for i, unit in enumerate(units):
-                    # TODO: Abstract and move to PerturbedLLMInput?
-                    if mask[i]:
-                        perturbed_unit = [
-                            self.tokenizer.decode(
-                                perturbation_strategy.get_replacement_token(token_id)
-                            ).strip()
-                            for token_id in ids_per_unit[i]
-                        ]
-                        perturbed_input.append(perturbed_unit)
-                        perturbed_units.append(unit)
-                    else:
-                        perturbed_input.append([unit])
-
                 perturbation = PerturbedLLMInput(
-                    input_units=perturbed_input,
-                    masked_units=perturbed_units,
+                    input_units=unit_tokens,
+                    input_unit_ids=unit_token_ids,
                     unit_idx=np.where(mask)[0].tolist(),
                     tokenizer=self.tokenizer,
+                    strategy=perturbation_strategy,
+                    perturb_word_wise=perturb_word_wise,
                 )
 
                 perturbations.append(perturbation)
@@ -211,7 +166,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                 print(*[[perturbation.masked_string] for perturbation in perturbations], sep="\n")
 
             outputs = await self.get_multiple_completions(
-                [perturbation.input_string for perturbation in perturbations]
+                [perturbation.perturbed_string for perturbation in perturbations]
             )
             total_llm_calls += len(outputs)
 
@@ -221,31 +176,15 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             for i, (perturbation, output, mask) in enumerate(zip(perturbations, outputs, masks)):
                 for strategy in attribution_strategies:
                     attribution_scores, norm_attribution_scores = self._get_scores(
+                        perturbation=perturbation,
                         perturbed_output=output,
                         original_output=original_output,
                         attribution_strategy=strategy,
                         chunksize=sum(mask),
                         ignore_output_token_location=ignore_output_token_location,
+                        logger=logger,
+                        depth=stage,
                     )
-
-                    if logger:
-                        logger.log_attributions(
-                            perturbation,
-                            norm_attribution_scores,
-                            strategy,
-                            output.message.content,
-                            depth=stage,
-                        )
-
-                        logger.log_perturbation(
-                            len(perturbation.masked_units) - 1,
-                            perturbation.masked_string,
-                            str(perturbation_strategy),
-                            original_input,
-                            original_output.message.content,
-                            perturbation.input_string,
-                            output.message.content,
-                        )
 
                     # For scoring we only use the first attribution strategy
                     if strategy == attribution_strategies[0]:
@@ -279,15 +218,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                     )
                 ) and mask.sum() > 1:
                     # Split the chunk in half
-                    indices = np.where(mask)[0]
-                    mid = len(indices) // 2
-
-                    mask1 = np.zeros(unit_count, dtype=bool)
-                    mask2 = np.zeros(unit_count, dtype=bool)
-
-                    mask1[indices[:mid]] = True
-                    mask2[indices[mid:]] = True
-
+                    mask1, mask2 = split_mask(mask)
                     new_masks.append(mask1)
                     new_masks.append(mask2)
 
@@ -385,11 +316,14 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
     def _get_scores(
         self,
+        perturbation: PerturbedLLMInput,
         perturbed_output: StrictChoice,
         original_output: StrictChoice,
         attribution_strategy: str,
         chunksize: int = 1,
         ignore_output_token_location: bool = True,
+        depth: int = 0,
+        logger: Optional[ExperimentLogger] = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         if ignore_output_token_location:
             perturbed_output = self._make_output_location_invariant(
@@ -418,5 +352,24 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             "sentence_attribution": np.mean(list(token_attributions.values())) / chunksize,
             "token_attribution": {k: v / chunksize for k, v in token_attributions.items()},
         }
+
+        if logger:
+            logger.log_attributions(
+                perturbation=perturbation,
+                attribution_scores=norm_scores,
+                strategy=attribution_strategy,
+                output=perturbed_output.message.content,
+                depth=depth,
+            )
+
+            logger.log_perturbation(
+                perturbation_pos=len(perturbation.masked_units) - 1,
+                perturbation_token=perturbation.masked_string,
+                perturbation_strategy=str(attribution_strategy),
+                original_input=perturbation.input_string,
+                original_output=original_output.message.content,
+                perturbed_input=perturbation.perturbed_string,
+                perturbed_output=perturbed_output.message.content,
+            )
 
         return scores, norm_scores
