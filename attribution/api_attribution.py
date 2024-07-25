@@ -129,7 +129,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         if init_chunk_size is None:
             init_chunk_size = max(2, len(llm_input.unit_tokens) // CHUNK_DIVISIOR)
         if stride is None:
-            stride = init_chunk_size//2
+            stride = max(1, init_chunk_size//2)
 
         original_output = await self.get_chat_completion(llm_input.input_string)
         if logger:
