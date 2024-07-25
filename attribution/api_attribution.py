@@ -312,19 +312,11 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
     def _get_scores(
         self,
-<<<<<<< HEAD
-        input_text: str,
-        perturbation_strategy: PerturbationStrategy = FixedPerturbationStrategy(),
-        attribution_strategies: List[str] = ["prob_diff"],
-        logger: Optional[ExperimentLogger] = None,
-        perturb_word_wise: bool = False,
-=======
         perturbation: PerturbedLLMInput,
         perturbed_output: StrictChoice,
         original_output: StrictChoice,
         attribution_strategy: str,
         chunksize: int = 1,
->>>>>>> origin/hierarchical-perturbation
         ignore_output_token_location: bool = True,
         depth: int = 0,
         logger: Optional[ExperimentLogger] = None,
@@ -337,130 +329,6 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         if attribution_strategy == "cosine":
             token_attributions = cosine_similarity_attribution(
                 original_output.message.content,
-<<<<<<< HEAD
-                perturbation_strategy,
-                perturb_word_wise,
-            )
-
-        # A unit is either a word or a single token, depending on the value of `perturb_word_wise`
-        unit_offset = 0
-        if perturb_word_wise:
-            words = [" " + w for w in input_text.split()]
-            words[0] = words[0][1:]
-            tokens_per_unit = [self.tokenizer.tokenize(word) for word in words]
-            token_ids_per_unit = [
-                self.tokenizer.encode(word, add_special_tokens=False) for word in words
-            ]
-        else:
-            tokens_per_unit = [[token] for token in self.tokenizer.tokenize(input_text)]
-            token_ids_per_unit = [
-                [token_id]
-                for token_id in self.tokenizer.encode(input_text, add_special_tokens=False)
-            ]
-
-        tasks = []
-        perturbations = []
-        for i_unit, unit_tokens in enumerate(tokens_per_unit):
-            replacement_token_ids = [
-                perturbation_strategy.get_replacement_token(token_id)
-                for token_id in token_ids_per_unit[i_unit]
-            ]
-
-            # Replace the current word with the new tokens
-            left_token_ids = [
-                token_id
-                for unit_token_ids in token_ids_per_unit[:i_unit]
-                for token_id in unit_token_ids
-            ]
-            right_token_ids = [
-                token_id
-                for unit_token_ids in token_ids_per_unit[i_unit + 1 :]
-                for token_id in unit_token_ids
-            ]
-            perturbed_input = self.tokenizer.decode(
-                left_token_ids + replacement_token_ids + right_token_ids, skip_special_tokens=True
-            )
-
-            # Create task for the perturbed input
-            tasks.append(asyncio.create_task(self.get_chat_completion(perturbed_input)))
-            perturbations.append(
-                {
-                    "input": perturbed_input,
-                    "unit_tokens": unit_tokens,
-                    "replaced_token_ids": replacement_token_ids,
-                }
-            )
-
-        # Get the output logprobs for the perturbed inputs
-        if self.request_chunksize is not None and len(tasks) > self.request_chunksize:
-            outputs = []
-            for idx in tqdm(
-                range(0, len(tasks), self.request_chunksize),
-                desc=f"Sending {self.request_chunksize:.0f} concurrent requests at a time",
-            ):
-                batch = [
-                    tasks[i] for i in range(idx, min(idx + self.request_chunksize, len(tasks)))
-                ]
-                outputs.extend(await asyncio.gather(*batch))
-                await asyncio.sleep(0.1)
-        else:
-            outputs = await asyncio.gather(*tasks)
-
-        for perturbation, perturbed_output in zip(perturbations, outputs):
-            if ignore_output_token_location:
-                perturbed_output = self.make_output_location_invariant(
-                    original_output, perturbed_output
-                )
-
-            for attribution_strategy in attribution_strategies:
-                if attribution_strategy == "cosine":
-                    total_attr, attributed_tokens, token_attributions = (
-                        cosine_similarity_attribution(
-                            original_output.message.content,
-                            perturbed_output.message.content,
-                            self.token_embeddings,
-                            self.tokenizer,
-                        )
-                    )
-                elif attribution_strategy == "prob_diff":
-                    total_attr, attributed_tokens, token_attributions = token_prob_attribution(
-                        original_output.logprobs, perturbed_output.logprobs
-                    )
-                else:
-                    raise ValueError(f"Unknown attribution strategy: {attribution_strategy}")
-
-                if logger:
-                    for i, unit_token in enumerate(perturbation["unit_tokens"]):
-                        logger.log_input_token_attribution(
-                            attribution_strategy,
-                            unit_offset + i,
-                            unit_token,
-                            float(total_attr),
-                        )
-                        for j, attr_score in enumerate(token_attributions):
-                            logger.log_token_attribution_matrix(
-                                attribution_strategy,
-                                unit_offset + i,
-                                j,
-                                attributed_tokens[j],
-                                attr_score.squeeze(),
-                                perturbation["input"],
-                                perturbed_output.message.content,
-                            )
-            unit_offset += len(perturbation["unit_tokens"])
-
-        if logger:
-            logger.log_perturbation(
-                i,
-                self.tokenizer.decode(perturbation["replaced_token_ids"], skip_special_tokens=True)[
-                    0
-                ],
-                perturbation_strategy,
-                input_text,
-                original_output.message.content,
-                perturbation["input"],
-=======
->>>>>>> origin/hierarchical-perturbation
                 perturbed_output.message.content,
                 self.token_embeddings,
                 self.tokenizer,
