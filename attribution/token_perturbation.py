@@ -10,6 +10,9 @@ from .types import Unit
 
 
 class PerturbationStrategy:
+    def get_replacement_units(self, units_to_replace: list[Unit]) -> list[Unit]:
+        raise NotImplementedError
+
     def get_replacement_token(self, token_id_to_replace: int) -> int:
         raise NotImplementedError
 
@@ -23,24 +26,59 @@ class FixedPerturbationStrategy(PerturbationStrategy):
             raise ValueError("The replacement token must be a single token, or empty.")
         self.replacement_token = replacement_token[0]
 
-    def get_replacement_token(self, token_id_to_replace: int) -> int:
-        return self.replacement_token
+    def get_replacement_units(self, units_to_replace: list[Unit]) -> list[Unit]:
+        return [self.get_replacement_token(0)]
+
+    def get_replacement_token(self, token_id_to_replace: int) -> Unit:
+        if self.replacement_token == "":
+            return [self.replacement_token]
+        else:
+            return [f"Ġ{self.replacement_token}"]
 
     def __str__(self):
         return "fixed"
 
 
 class NthNearestPerturbationStrategy(PerturbationStrategy):
-    def __init__(self, n: int, token_embeddings: Optional[np.ndarray] = None):
+    def __init__(
+        self,
+        n: int,
+        tokenizer: Optional[PreTrainedTokenizer] = None,
+        token_embeddings: Optional[np.ndarray] = None,
+    ):
         if n is None:
             raise ValueError("Parameter 'n' must be provided for 'nth_nearest' strategy")
         self.n = n
-        model = GPT2LMHeadModel.from_pretrained("gpt2")
-        if isinstance(model, tuple):
-            model = model[0]
-        self.token_embeddings = token_embeddings or model.transformer.wte.weight.detach().numpy()
+        self.tokenizer = tokenizer or GPT2Tokenizer.from_pretrained("gpt2", add_prefix_space=True)
 
-    def get_replacement_token(self, token_id_to_replace) -> int:
+        if token_embeddings is None:
+            head_model = GPT2LMHeadModel.from_pretrained("gpt2")
+            if isinstance(head_model, tuple):
+                head_model = head_model[0]
+            self.token_embeddings = head_model.transformer.wte.weight.detach().numpy()
+
+    def get_replacement_units(self, units_to_replace: list[Unit]) -> list[Unit]:
+        replacement_units = []
+        for unit in units_to_replace:
+            replacement_tokens = []
+            for token in unit:
+                # Stripping whitespace token if present as it often results in a completely different replacement token
+                stripped_token = token.strip("Ġ")
+                token_id = self.tokenizer.encode(stripped_token, add_special_tokens=False)[0]
+                replacement_token_id = self.get_replacement_token(token_id)
+                replacement_token = self.tokenizer._convert_id_to_token(replacement_token_id)
+
+                # Re-add whitespace prefix if necessary
+                if token.startswith("Ġ") and not replacement_token.startswith("Ġ"):
+                    replacement_token = f"Ġ{replacement_token}"
+
+                replacement_tokens.append(replacement_token)
+
+            replacement_units.append(replacement_tokens)
+
+        return replacement_units
+
+    def get_replacement_token(self, token_id_to_replace: int) -> int:
         sorted_tokens = sort_tokens_by_similarity(token_id_to_replace, self.token_embeddings)
         pos = self.n
         if pos < 0:
@@ -88,20 +126,17 @@ class PerturbedLLMInput:
         return convert_units_to_string(self.perturbed_units, self.original.tokenizer)
 
     def get_pertrubation(self) -> tuple[list[Unit], list[Unit]]:
-        perturbed_units = []
-        masked_units = []
-        for i, unit in enumerate(self.original.unit_tokens):
-            if i in self.perturb_unit_ids:
-                perturbed_tokens = [
-                    self.original.tokenizer.decode(
-                        self.strategy.get_replacement_token(token_id)
-                    ).strip()
-                    for token_id in self.original.unit_token_ids[i]
-                ]
-                perturbed_units.append(perturbed_tokens)
-                masked_units.append(unit)
-            else:
-                perturbed_units.append(unit)
+        masked_units = [
+            unit for i, unit in enumerate(self.original.unit_tokens) if i in self.perturb_unit_ids
+        ]
+
+        replacement_units = self.strategy.get_replacement_units(masked_units)
+
+        perturbed_units = (
+            self.original.unit_tokens[: min(self.perturb_unit_ids)]
+            + replacement_units
+            + self.original.unit_tokens[max(self.perturb_unit_ids) + 1 :]
+        )
 
         return perturbed_units, masked_units
 
