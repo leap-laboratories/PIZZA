@@ -85,9 +85,9 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         perturbations: list[PerturbedLLMInput] = []
         for i_unit in range(len(unit_tokens)):
             perturbation = PerturbedLLMInput(
-                input_units=unit_tokens,
-                input_unit_ids=unit_token_ids,
-                unit_idx=[i_unit],
+                unit_tokens=unit_tokens,
+                unit_token_ids=unit_token_ids,
+                perturb_unit_ids=[i_unit],
                 tokenizer=self.tokenizer,
                 strategy=perturbation_strategy,
                 perturb_word_wise=perturb_word_wise,
@@ -151,9 +151,9 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             perturbations: list[PerturbedLLMInput] = []
             for mask in masks:
                 perturbation = PerturbedLLMInput(
-                    input_units=unit_tokens,
-                    input_unit_ids=unit_token_ids,
-                    unit_idx=np.where(mask)[0].tolist(),
+                    unit_tokens=unit_tokens,
+                    unit_token_ids=unit_token_ids,
+                    perturb_unit_ids=np.where(mask)[0].tolist(),
                     tokenizer=self.tokenizer,
                     strategy=perturbation_strategy,
                     perturb_word_wise=perturb_word_wise,

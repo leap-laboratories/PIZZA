@@ -6,6 +6,8 @@ import numpy.typing as npt
 from sklearn.neighbors import NearestNeighbors
 from transformers import GPT2LMHeadModel, GPT2Tokenizer, PreTrainedTokenizer
 
+from .types import Unit
+
 
 class PerturbationStrategy:
     def get_replacement_token(self, token_id_to_replace: int) -> int:
@@ -46,27 +48,27 @@ class NthNearestPerturbationStrategy(PerturbationStrategy):
 
 
 class PerturbedLLMInput:
-    input_units: list[list[str]]
-    input_unit_ids: list[list[int]]
-    unit_idx: list[int]
+    unit_tokens: list[Unit]
+    unit_token_ids: list[list[int]]
+    perturb_unit_ids: list[int]
     tokenizer: PreTrainedTokenizer
     strategy: PerturbationStrategy
     perturb_word_wise: bool = False
-    perturbed_units: list[list[str]]
-    masked_units: list[list[str]]
+    perturbed_units: list[Unit]
+    masked_units: list[Unit]
 
     def __init__(
         self,
-        input_units: list[list[str]],
-        input_unit_ids: list[list[int]],
-        unit_idx: list[int],
+        unit_tokens: list[Unit],
+        unit_token_ids: list[list[int]],
+        perturb_unit_ids: list[int],
         tokenizer: PreTrainedTokenizer,
         strategy: PerturbationStrategy,
         perturb_word_wise: bool = False,
     ):
-        self.input_units = input_units
-        self.input_unit_ids = input_unit_ids
-        self.unit_idx = unit_idx
+        self.unit_tokens = unit_tokens
+        self.unit_token_ids = unit_token_ids
+        self.perturb_unit_ids = perturb_unit_ids
         self.tokenizer = tokenizer
         self.strategy = strategy
         self.perturb_word_wise = perturb_word_wise
@@ -75,29 +77,29 @@ class PerturbedLLMInput:
 
     @cached_property
     def input_string(self) -> str:
-        units = combine_units(self.input_units)
-        return self.tokenizer.convert_tokens_to_string(units).strip()
+        return self.convert_units_to_string(self.unit_tokens)
 
     @cached_property
     def masked_string(self) -> str:
-        units = combine_units(self.masked_units)
-        return self.tokenizer.convert_tokens_to_string(units).strip()
+        return self.convert_units_to_string(self.masked_units)
 
     @cached_property
     def perturbed_string(self) -> str:
-        units = combine_units(self.perturbed_units)
-        return self.tokenizer.convert_tokens_to_string(units).strip()
+        return self.convert_units_to_string(self.perturbed_units)
 
-    def get_pertrubation(self):
+    def convert_units_to_string(self, units: list[Unit]) -> str:
+        return self.tokenizer.convert_tokens_to_string(combine_units(units)).strip()
+
+    def get_pertrubation(self) -> tuple[list[Unit], list[Unit]]:
         perturbed_units = []
         masked_units = []
-        for i, unit in enumerate(self.input_units):
-            if i in self.unit_idx:
+        for i, unit in enumerate(self.unit_tokens):
+            if i in self.perturb_unit_ids:
                 perturbed_tokens = [
                     self.tokenizer.decode(self.strategy.get_replacement_token(token_id)).strip()
-                    for token_id in self.input_unit_ids[i]
+                    for token_id in self.unit_token_ids[i]
                 ]
-                perturbed_units.append(combine_unit(perturbed_tokens))
+                perturbed_units.append(perturbed_tokens)
                 masked_units.append(unit)
             else:
                 perturbed_units.append(unit)
@@ -189,7 +191,7 @@ def get_units_from_prompt(
     input_text: str,
     tokenizer: PreTrainedTokenizer,
     perturb_word_wise: bool = False,
-) -> tuple[list[list[str]], list[list[int]]]:
+) -> tuple[list[Unit], list[list[int]]]:
     # A unit is either a word or a single token, depending on the value of `perturb_word_wise`
     if perturb_word_wise:
         words = [" " + w for w in input_text.split()]
@@ -205,7 +207,7 @@ def get_units_from_prompt(
     return tokens_per_unit, token_ids_per_unit
 
 
-def combine_units(unit_tokens: list[list[str]]) -> list[str]:
+def combine_units(unit_tokens: list[Unit]) -> list[str]:
     return [combine_unit(tokens) for tokens in unit_tokens]
 
 

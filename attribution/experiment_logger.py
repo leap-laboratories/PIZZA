@@ -91,7 +91,7 @@ class ExperimentLogger:
         output: str,
         depth: int = 0,
     ):
-        for unit_token, token_id in zip(perturbation.masked_units, perturbation.unit_idx):
+        for unit_token, token_id in zip(perturbation.masked_units, perturbation.perturb_unit_ids):
             self.log_input_token_attribution(
                 strategy,
                 token_id,
