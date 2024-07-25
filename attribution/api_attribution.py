@@ -112,7 +112,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         self,
         input_text: str,
         perturbation_strategy: PerturbationStrategy = FixedPerturbationStrategy(),
-        attribution_strategies: List[str] = ["cosine", "prob_diff"],
+        attribution_strategies: List[str] = ["prob_diff"],
         logger: Optional[ExperimentLogger] = None,
         perturb_word_wise: bool = False,
         ignore_output_token_location: bool = True,
