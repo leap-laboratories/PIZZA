@@ -58,10 +58,17 @@ class NthNearestPerturbationStrategy(PerturbationStrategy):
         for unit in units_to_replace:
             replacement_tokens = []
             for token in unit:
-                token_id = self.tokenizer.encode(token, add_special_tokens=False)[0]
+                # Stripping whitespace token if present as it often results in a completely different replacement token
+                stripped_token = token.strip("Ġ")
+                token_id = self.tokenizer.encode(stripped_token, add_special_tokens=False)[0]
                 replacement_token_id = self.get_replacement_token(token_id)
                 replacement_token = self.tokenizer._convert_id_to_token(replacement_token_id)
-                replacement_tokens.append(f"Ġ{replacement_token}")
+
+                # Re-add whitespace prefix if necessary
+                if token.startswith("Ġ") and not replacement_token.startswith("Ġ"):
+                    replacement_token = f"Ġ{replacement_token}"
+
+                replacement_tokens.append(replacement_token)
 
             replacement_units.append(replacement_tokens)
 
