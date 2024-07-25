@@ -73,7 +73,7 @@ attribution_task = attributor.compute_attributions(
 
 asyncio.run(attribution_task)
 
-logger.print_sentence_attribution()
+logger.print_total_attribution()
 logger.print_attribution_matrix(exp_id=1)
 ```
 
@@ -106,7 +106,7 @@ attribution_task = attributor.hierarchical_perturbation(
 
 asyncio.run(attribution_task)
 
-logger.print_sentence_attribution()
+logger.print_total_attribution()
 logger.print_attribution_matrix(exp_id=1)
 ```
 

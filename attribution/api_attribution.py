@@ -35,6 +35,7 @@ load_dotenv()
 DEFAULT_OPENAI_MODEL = "gpt-3.5-turbo"
 REQUEST_DELAY = 0.1
 MIN_MAXIMUM_THRESHOLD = 0.01
+CHUNK_DIVISIOR = 8
 
 
 class OpenAIAttributor(BaseAsyncLLMAttributor):
@@ -111,19 +112,24 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
     async def hierarchical_perturbation(
         self,
         original_input: str,
-        init_chunk_size: int,
+        init_chunk_size: Optional[int] = None,
         stride: Optional[int] = None,
         perturbation_strategy: PerturbationStrategy = FixedPerturbationStrategy(),
-        attribution_strategies: list[str] = ["cosine", "prob_diff"],
+        attribution_strategies: list[str] = ["prob_diff"],
         static_threshold: Optional[float] = None,
         unit_definition: Literal["token", "word"] = "token",
         ignore_output_token_location: bool = True,
         logger: Optional[ExperimentLogger] = None,
-        verbose: bool = False,
+        verbose: int = 0,
     ) -> None:
         llm_input = LLMInput(
             input_string=original_input, tokenizer=self.tokenizer, unit_definition=unit_definition
         )
+
+        if init_chunk_size is None:
+            init_chunk_size = max(2, len(llm_input.unit_tokens) // CHUNK_DIVISIOR)
+        if stride is None:
+            stride = init_chunk_size//2
 
         original_output = await self.get_chat_completion(llm_input.input_string)
         if logger:
@@ -143,7 +149,8 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
         # Main loop for hierarchical perturbation, run until masks cannot be further subdivided
         while masks:
-            print(f"Stage {stage}: making {len(masks)} perturbations")
+            if verbose > 0:
+                print(f"Stage {stage}: making {len(masks)} perturbations")
             # Define perturbations for each mask
             perturbations: list[PerturbedLLMInput] = []
             for mask in masks:
@@ -155,9 +162,9 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                     )
                 )
 
-            if verbose:
+            if verbose > 1:
                 print("Masked out tokens/words:")
-                print(*[[perturbation.masked_string] for perturbation in perturbations], sep="\n")
+                print(*[[perturbation.masked_string] for perturbation in perturbations], sep=" ")
 
             # Wait for the perturbed results
             outputs = await self.get_multiple_completions(
@@ -184,8 +191,8 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
                     # For scoring we only use the first attribution strategy
                     if strategy == attribution_strategies[0]:
-                        chunk_scores.append(attribution_scores["sentence_attribution"])
-                        unit_attribution[i, mask] = norm_attribution_scores["sentence_attribution"]
+                        chunk_scores.append(attribution_scores["total_attribution"])
+                        unit_attribution[i, mask] = norm_attribution_scores["total_attribution"]
 
             # Filling units that were not perturbed with zeros to avoid full nan columns
             unperturbed_units = np.isnan(unit_attribution).all(axis=0)
@@ -341,11 +348,11 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             raise ValueError(f"Unknown attribution strategy: {attribution_strategy}")
 
         scores = {
-            "sentence_attribution": np.mean(list(token_attributions.values())),
+            "total_attribution": np.mean(list(token_attributions.values())),
             "token_attribution": token_attributions,
         }
         norm_scores = {
-            "sentence_attribution": np.mean(list(token_attributions.values())) / chunksize,
+            "total_attribution": np.mean(list(token_attributions.values())) / chunksize,
             "token_attribution": {k: v / chunksize for k, v in token_attributions.items()},
         }
 

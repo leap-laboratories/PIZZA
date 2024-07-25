@@ -97,7 +97,7 @@ class ExperimentLogger:
                 strategy,
                 token_id,
                 combine_unit(unit_token),
-                float(attribution_scores["sentence_attribution"]),
+                float(attribution_scores["total_attribution"]),
             )
 
             for j, (output_token, attr_score) in enumerate(
@@ -184,7 +184,7 @@ class ExperimentLogger:
         color_hex = mcolors.to_hex(rgba_color)
         return color_hex
 
-    def print_text_total_attribution(self, exp_id: Optional[int] = None, score_agg: Literal["sum", "last"] = "sum"):
+    def print_text_total_attribution(self, exp_id: Optional[int] = None, score_agg: Literal["mean", "last"] = "mean"):
 
         if exp_id == -1:
             exp_id = self.df_experiments["exp_id"].max()
@@ -270,7 +270,7 @@ class ExperimentLogger:
                 print(df)
 
 
-    def print_total_attribution(self, exp_id: Optional[int] = None, score_agg: Literal["sum", "last"] = "sum"):
+    def print_total_attribution(self, exp_id: Optional[int] = None, score_agg: Literal["mean", "last"] = "mean"):
         totals = []
         if exp_id == -1:
             exp_id = self.df_experiments["exp_id"].max()
@@ -314,7 +314,7 @@ class ExperimentLogger:
         exp_id: int = -1,
         attribution_strategy: Optional[str] = None,
         show_debug_cols: bool = False,
-        score_agg: Literal["sum", "last"] = "sum",
+        score_agg: Literal["mean", "last"] = "mean",
     ):
         if exp_id == -1:
             exp_id = self.df_experiments["exp_id"].max()
@@ -331,7 +331,7 @@ class ExperimentLogger:
         exp_id: int = -1,
         attribution_strategy: Optional[str] = None,
         show_debug_cols: bool = False,
-        score_agg: Literal["sum", "last"] = "sum",
+        score_agg: Literal["mean", "last"] = "mean",
     ):
         if exp_id == -1:
             exp_id = self.df_experiments["exp_id"].max()
@@ -356,10 +356,10 @@ class ExperimentLogger:
             ]
 
             is_hierarchical = exp_data["depth"].any()
+
             if is_hierarchical:
                 exp_data = self._aggregate_attr_score_df(exp_data, score_agg)
                 token_data = self._aggregate_attr_score_df(token_data, score_agg)
-
 
             # Create the pivot table for the matrix
             matrix = exp_data.pivot(
@@ -383,10 +383,6 @@ class ExperimentLogger:
             # Set the row and column names of the matrix
             matrix.index = input_tokens_with_pos
             matrix.columns = output_tokens_with_pos
-
-            if is_hierarchical:
-                # Output is a saliency map which is depth dependent, so normalize the values
-                matrix = matrix / matrix.abs().sum().replace(0, 1)
 
 
             if show_debug_cols:
@@ -446,12 +442,12 @@ class ExperimentLogger:
         return df_pivot
 
     def _aggregate_attr_score_df(
-        self, df: pd.DataFrame, score_agg: Literal["sum", "last"]
+        self, df: pd.DataFrame, score_agg: Literal["mean", "last"]
     ) -> pd.DataFrame:
         """
         Aggregate duplicate perturbed tokens, only relevant for hierarchical perturbation methods
         df: DataFrame containing the token attribution scores (generally one of the attribution tables)
-        score_agg: Method to aggregate the scores, either "sum" with produces a saliency map, or "last" which gives scores similar to the non-hierarchical method
+        score_agg: Method to aggregate the scores, either "mean" with produces a saliency map, or "last" which gives scores similar to the non-hierarchical method
         """
 
         aggregation_dict = dict.fromkeys(df.columns, "last")
