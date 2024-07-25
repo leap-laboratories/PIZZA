@@ -1,11 +1,10 @@
 import asyncio
 import os
 from copy import deepcopy
-from typing import Any, Optional, cast
+from typing import Any, Literal, Optional, cast
 
 import numpy as np
 import openai
-import pandas as pd
 from dotenv import load_dotenv
 from tqdm import tqdm
 from transformers import (
@@ -23,11 +22,10 @@ from .base import BaseAsyncLLMAttributor
 from .experiment_logger import ExperimentLogger
 from .token_perturbation import (
     FixedPerturbationStrategy,
+    LLMInput,
     PerturbationStrategy,
     PerturbedLLMInput,
-    combine_units,
     get_masks,
-    get_units_from_prompt,
     split_mask,
 )
 from .types import StrictChoice
@@ -67,30 +65,28 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         perturbation_strategy: PerturbationStrategy = FixedPerturbationStrategy(),
         attribution_strategies: list[str] = ["cosine", "prob_diff"],
         logger: Optional[ExperimentLogger] = None,
-        perturb_word_wise: bool = False,
+        unit_definition: Literal["token", "word"] = "token",
         ignore_output_token_location: bool = True,
     ):
-        original_output = await self.get_chat_completion(original_input)
+        llm_input = LLMInput(
+            input_string=original_input, tokenizer=self.tokenizer, unit_definition=unit_definition
+        )
+        original_output = await self.get_chat_completion(llm_input.input_string)
 
         if logger:
             logger.start_experiment(
                 original_input,
                 original_output.message.content,
                 perturbation_strategy,
-                perturb_word_wise,
+                unit_definition,
             )
-        unit_tokens, unit_token_ids = get_units_from_prompt(
-            original_input, self.tokenizer, perturb_word_wise
-        )
+
         perturbations: list[PerturbedLLMInput] = []
-        for i_unit in range(len(unit_tokens)):
+        for i_unit in range(len(llm_input.unit_tokens)):
             perturbation = PerturbedLLMInput(
-                unit_tokens=unit_tokens,
-                unit_token_ids=unit_token_ids,
+                original=llm_input,
                 perturb_unit_ids=[i_unit],
-                tokenizer=self.tokenizer,
                 strategy=perturbation_strategy,
-                perturb_word_wise=perturb_word_wise,
             )
             perturbations.append(perturbation)
 
@@ -120,26 +116,25 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         perturbation_strategy: PerturbationStrategy = FixedPerturbationStrategy(),
         attribution_strategies: list[str] = ["cosine", "prob_diff"],
         static_threshold: Optional[float] = None,
-        perturb_word_wise: bool = False,
+        unit_definition: Literal["token", "word"] = "token",
         ignore_output_token_location: bool = True,
         logger: Optional[ExperimentLogger] = None,
         verbose: bool = False,
-    ) -> pd.Series:
-        unit_tokens, unit_token_ids = get_units_from_prompt(
-            original_input, self.tokenizer, perturb_word_wise=perturb_word_wise
+    ) -> None:
+        llm_input = LLMInput(
+            input_string=original_input, tokenizer=self.tokenizer, unit_definition=unit_definition
         )
-        units = combine_units(unit_tokens)
 
-        original_output = await self.get_chat_completion(original_input)
+        original_output = await self.get_chat_completion(llm_input.input_string)
         if logger:
             logger.start_experiment(
                 original_input,
                 original_output.message.content,
                 perturbation_strategy,
-                perturb_word_wise,
+                unit_definition,
             )
 
-        unit_count = len(units)
+        unit_count = len(llm_input.unit_tokens)
         masks = get_masks(unit_count, init_chunk_size, stride)
         cumulative_unit_attribution = np.zeros(unit_count)
         total_llm_calls = 1
@@ -150,16 +145,13 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             new_masks = []
             perturbations: list[PerturbedLLMInput] = []
             for mask in masks:
-                perturbation = PerturbedLLMInput(
-                    unit_tokens=unit_tokens,
-                    unit_token_ids=unit_token_ids,
-                    perturb_unit_ids=np.where(mask)[0].tolist(),
-                    tokenizer=self.tokenizer,
-                    strategy=perturbation_strategy,
-                    perturb_word_wise=perturb_word_wise,
+                perturbations.append(
+                    PerturbedLLMInput(
+                        original=llm_input,
+                        strategy=perturbation_strategy,
+                        perturb_unit_ids=np.where(mask)[0].tolist(),
+                    )
                 )
-
-                perturbations.append(perturbation)
 
             if verbose:
                 print("Masked out tokens/words:")
@@ -228,8 +220,6 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
         if logger:
             logger.stop_experiment(num_llm_calls=total_llm_calls)
-
-        return pd.Series(cumulative_unit_attribution, index=units, name="saliency")
 
     async def get_chat_completion(self, input: str) -> StrictChoice:
         response = await self.openai_client.chat.completions.create(
@@ -366,7 +356,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                 perturbation_pos=len(perturbation.masked_units) - 1,
                 perturbation_token=perturbation.masked_string,
                 perturbation_strategy=str(attribution_strategy),
-                original_input=perturbation.input_string,
+                original_input=perturbation.original.input_string,
                 original_output=original_output.message.content,
                 perturbed_input=perturbation.perturbed_string,
                 perturbed_output=perturbed_output.message.content,

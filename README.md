@@ -68,7 +68,7 @@ attribution_task = attributor.compute_attributions(
     perturbation_strategy=NthNearestPerturbationStrategy(n=-1),
     attribution_strategies=["cosine", "prob_diff"],
     logger=logger,
-    perturb_word_wise=True,
+    unit_definition="word",
 )
 
 asyncio.run(attribution_task)
@@ -102,7 +102,7 @@ attribution_task = attributor.hierarchical_perturbation(
     attribution_strategies=["cosine", "prob_diff"],
     static_threshold=0.5,
     logger=logger,
-    perturb_word_wise=True,
+    unit_definition="word",
 )
 
 asyncio.run(attribution_task)

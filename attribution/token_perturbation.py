@@ -1,5 +1,5 @@
 from functools import cached_property
-from typing import List, Optional
+from typing import Literal, Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -47,57 +47,52 @@ class NthNearestPerturbationStrategy(PerturbationStrategy):
         return f"nth_nearest (n={self.n})"
 
 
-class PerturbedLLMInput:
-    unit_tokens: list[Unit]
-    unit_token_ids: list[list[int]]
-    perturb_unit_ids: list[int]
-    tokenizer: PreTrainedTokenizer
-    strategy: PerturbationStrategy
-    perturb_word_wise: bool = False
-    perturbed_units: list[Unit]
-    masked_units: list[Unit]
-
+class LLMInput:
     def __init__(
         self,
-        unit_tokens: list[Unit],
-        unit_token_ids: list[list[int]],
-        perturb_unit_ids: list[int],
+        input_string: str,
         tokenizer: PreTrainedTokenizer,
-        strategy: PerturbationStrategy,
-        perturb_word_wise: bool = False,
+        unit_definition: Literal["token", "word"] = "token",
     ):
-        self.unit_tokens = unit_tokens
-        self.unit_token_ids = unit_token_ids
-        self.perturb_unit_ids = perturb_unit_ids
+        self.input_string = input_string
         self.tokenizer = tokenizer
+        self.unit_definition = unit_definition
+        self.unit_tokens, self.unit_token_ids = get_units_from_prompt(
+            input_string, tokenizer, unit_definition
+        )
+
+
+class PerturbedLLMInput:
+    def __init__(
+        self,
+        original: LLMInput,
+        perturb_unit_ids: list[int],
+        strategy: PerturbationStrategy,
+    ):
+        self.original = original
+        self.perturb_unit_ids = perturb_unit_ids
         self.strategy = strategy
-        self.perturb_word_wise = perturb_word_wise
 
         self.perturbed_units, self.masked_units = self.get_pertrubation()
 
     @cached_property
-    def input_string(self) -> str:
-        return self.convert_units_to_string(self.unit_tokens)
-
-    @cached_property
     def masked_string(self) -> str:
-        return self.convert_units_to_string(self.masked_units)
+        return convert_units_to_string(self.masked_units, self.original.tokenizer)
 
     @cached_property
     def perturbed_string(self) -> str:
-        return self.convert_units_to_string(self.perturbed_units)
-
-    def convert_units_to_string(self, units: list[Unit]) -> str:
-        return self.tokenizer.convert_tokens_to_string(combine_units(units)).strip()
+        return convert_units_to_string(self.perturbed_units, self.original.tokenizer)
 
     def get_pertrubation(self) -> tuple[list[Unit], list[Unit]]:
         perturbed_units = []
         masked_units = []
-        for i, unit in enumerate(self.unit_tokens):
+        for i, unit in enumerate(self.original.unit_tokens):
             if i in self.perturb_unit_ids:
                 perturbed_tokens = [
-                    self.tokenizer.decode(self.strategy.get_replacement_token(token_id)).strip()
-                    for token_id in self.unit_token_ids[i]
+                    self.original.tokenizer.decode(
+                        self.strategy.get_replacement_token(token_id)
+                    ).strip()
+                    for token_id in self.original.unit_token_ids[i]
                 ]
                 perturbed_units.append(perturbed_tokens)
                 masked_units.append(unit)
@@ -105,6 +100,10 @@ class PerturbedLLMInput:
                 perturbed_units.append(unit)
 
         return perturbed_units, masked_units
+
+
+def convert_units_to_string(units: list[Unit], tokenizer: PreTrainedTokenizer) -> str:
+    return tokenizer.convert_tokens_to_string(combine_units(units)).strip()
 
 
 def sort_tokens_by_similarity(
@@ -136,7 +135,7 @@ def get_most_similar_token_ids(
     token_id: int,
     embeddings: np.ndarray,
     n_tokens: int = 1,
-) -> List[int]:
+) -> list[int]:
     token_embedding = embeddings[token_id, :]
 
     # Fit the NearestNeighbors model to the embeddings
@@ -152,7 +151,7 @@ def get_increasingly_distant_token_ids(
     token_id: int,
     embeddings: np.ndarray,
     n_tokens: int = 1,
-) -> List[int]:
+) -> list[int]:
     if n_tokens > 4:
         raise ValueError("n_tokens cannot be more than 4")
 
@@ -190,10 +189,9 @@ def calculate_chunk_size(
 def get_units_from_prompt(
     input_text: str,
     tokenizer: PreTrainedTokenizer,
-    perturb_word_wise: bool = False,
+    unit_definition: Literal["token", "word"] = "token",
 ) -> tuple[list[Unit], list[list[int]]]:
-    # A unit is either a word or a single token, depending on the value of `perturb_word_wise`
-    if perturb_word_wise:
+    if unit_definition == "word":
         words = [" " + w for w in input_text.split()]
         words[0] = words[0][1:]
         tokens_per_unit = [tokenizer.tokenize(word) for word in words]

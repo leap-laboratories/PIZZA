@@ -18,7 +18,7 @@ class ExperimentLogger:
                 "original_input",
                 "original_output",
                 "perturbation_strategy",
-                "perturb_word_wise",
+                "unit_definition",
                 "duration",
                 "num_llm_calls",
             ]
@@ -63,7 +63,7 @@ class ExperimentLogger:
         original_input: str,
         original_output: str,
         perturbation_strategy: PerturbationStrategy,
-        perturb_word_wise: bool,
+        unit_definition: Literal["token", "word"],
     ):
         self.experiment_id += 1
         self.experiment_start_time = time.time()
@@ -72,7 +72,7 @@ class ExperimentLogger:
             "original_input": original_input,
             "original_output": original_output,
             "perturbation_strategy": str(perturbation_strategy),
-            "perturb_word_wise": perturb_word_wise,
+            "unit_definition": unit_definition,
             "duration": None,
             "num_llm_calls": None,
         }
@@ -192,15 +192,15 @@ class ExperimentLogger:
             perturbation_strategy = self.df_experiments.loc[
                 self.df_experiments["exp_id"] == exp_id, "perturbation_strategy"
             ].values[0]
-            perturb_word_wise = self.df_experiments.loc[
-                self.df_experiments["exp_id"] == exp_id, "perturb_word_wise"
+            unit_definition = self.df_experiments.loc[
+                self.df_experiments["exp_id"] == exp_id, "unit_definition"
             ].values[0]
 
             sentence_data = {
                 "exp_id": exp_id,
                 "attribution_strategy": attr_strat,
                 "perturbation_strategy": perturbation_strategy,
-                "perturb_word_wise": perturb_word_wise,
+                "unit_definition": unit_definition,
             }
             sentence_data.update(
                 {f"token_{i+1}": token_attr for i, token_attr in enumerate(token_attrs)}
