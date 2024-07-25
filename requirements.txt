@@ -26,6 +26,7 @@ filelock==3.14.0
     #   huggingface-hub
     #   torch
     #   transformers
+    #   triton
 fonttools==4.52.4
     # via matplotlib
 fsspec==2024.5.0
@@ -129,7 +130,7 @@ sympy==1.12.1
     # via torch
 threadpoolctl==3.5.0
     # via scikit-learn
-tokenizers==0.15.2
+tokenizers==0.19.1
     # via transformers
 torch==2.2.1
     # via -r requirements.in
@@ -138,8 +139,10 @@ tqdm==4.66.4
     #   huggingface-hub
     #   openai
     #   transformers
-transformers==4.39.0
+transformers==4.43.1
     # via -r requirements.in
+triton==2.2.0
+    # via torch
 typing-extensions==4.12.0
     # via
     #   anyio
