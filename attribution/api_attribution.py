@@ -116,6 +116,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         perturbation_strategy: PerturbationStrategy = FixedPerturbationStrategy(),
         attribution_strategies: list[str] = ["cosine", "prob_diff"],
         static_threshold: Optional[float] = None,
+        use_absolute_attribution: bool = False,
         unit_definition: Literal["token", "word"] = "token",
         ignore_output_token_location: bool = True,
         logger: Optional[ExperimentLogger] = None,
@@ -137,6 +138,8 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         # Defining boolean masks via a sliding window to split the input into chunks
         unit_count = len(llm_input.unit_tokens)
         masks = get_masks(unit_count, init_chunk_size, stride)
+
+        comparator = np.abs if use_absolute_attribution else lambda x: x
         cumulative_unit_attribution = np.zeros(unit_count)
         total_llm_calls = 1
         stage = 0
@@ -193,7 +196,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
             # Take mean of attribution scores and accumulate
             unit_attribution = np.nanmean(unit_attribution, axis=0)
-            cumulative_unit_attribution += np.abs(unit_attribution)
+            cumulative_unit_attribution += comparator(unit_attribution)
 
             if np.max(cumulative_unit_attribution) > MIN_MAXIMUM_THRESHOLD:
                 # Calculate midrange threshold value
@@ -212,7 +215,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                     cumulative_chunk_attribution >= midrange_score
                     or (
                         static_threshold is not None
-                        and np.abs(chunk_attribution) > static_threshold
+                        and comparator(chunk_attribution) > static_threshold
                     )
                 ) and mask.sum() > 1:
                     # Split the chunk in half
