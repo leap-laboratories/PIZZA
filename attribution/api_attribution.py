@@ -185,7 +185,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                         depth=stage,
                     )
 
-                    # For scoring we only use the first attribution strategy
+                    # For threshold calculation and comparison we only use the first attribution strategy
                     if strategy == attribution_strategies[0]:
                         chunk_scores.append(attribution_scores["sentence_attribution"])
                         unit_attribution[i, mask] = norm_attribution_scores["sentence_attribution"]
