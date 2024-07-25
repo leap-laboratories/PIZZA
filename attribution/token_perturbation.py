@@ -214,15 +214,17 @@ def combine_unit(tokens: list[str]) -> str:
 
 
 def get_masks(
-    input_size: int, init_chunk_size: int, stride: Optional[int] = None
+    input_size: int, window_size: int, stride: Optional[int] = None
 ) -> list[npt.NDArray[np.bool_]]:
+    # Generating masks with a sliding window defined by window_size and stride
     if stride is None:
-        stride = init_chunk_size
+        stride = window_size
 
+    # Padding the input to ensure the sliding window is centered
     padding = stride // 2
     masks: list[npt.NDArray[np.bool_]] = []
     for start in range(-padding, input_size + padding, stride):
-        end = min(start + init_chunk_size, input_size)
+        end = min(start + window_size, input_size)
         mask = np.zeros(input_size, dtype=bool)
         mask[max(start, 0) : min(end, input_size)] = True
 

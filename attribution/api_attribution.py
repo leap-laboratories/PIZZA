@@ -134,15 +134,17 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                 unit_definition,
             )
 
+        # Defining boolean masks via a sliding window to split the input into chunks
         unit_count = len(llm_input.unit_tokens)
         masks = get_masks(unit_count, init_chunk_size, stride)
         cumulative_unit_attribution = np.zeros(unit_count)
         total_llm_calls = 1
         stage = 0
 
+        # Main loop for hierarchical perturbation, run until masks cannot be further subdivided
         while masks:
             print(f"Stage {stage}: making {len(masks)} perturbations")
-            new_masks = []
+            # Define perturbations for each mask
             perturbations: list[PerturbedLLMInput] = []
             for mask in masks:
                 perturbations.append(
@@ -157,11 +159,13 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                 print("Masked out tokens/words:")
                 print(*[[perturbation.masked_string] for perturbation in perturbations], sep="\n")
 
+            # Wait for the perturbed results
             outputs = await self.get_multiple_completions(
                 [perturbation.perturbed_string for perturbation in perturbations]
             )
             total_llm_calls += len(outputs)
 
+            # Calculate attribution scores for each perturbation
             chunk_scores = []
             unit_attribution = np.full((len(masks), unit_count), np.nan)
 
@@ -199,6 +203,8 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             else:
                 break
 
+            # Split masks if their scores exceed the midrange score or a static threshold
+            new_masks = []
             for mask, chunk_attribution in zip(masks, chunk_scores):
                 cumulative_chunk_attribution = cumulative_unit_attribution[mask].mean()
 
