@@ -14,9 +14,13 @@ class FixedPerturbationStrategy(PerturbationStrategy):
     def __init__(self, replacement_token="", tokenizer: Optional[PreTrainedTokenizer] = None):
         self.replacement_token = replacement_token
         self.tokenizer = tokenizer or GPT2Tokenizer.from_pretrained("gpt2", add_prefix_space=True)
+        replacement_token = self.tokenizer.encode(self.replacement_token, add_special_tokens=False)
+        if len(replacement_token) > 1:
+            raise ValueError("The replacement token must be a single token, or empty.")
+        self.replacement_token = replacement_token[0]
 
     def get_replacement_token(self, token_id_to_replace: int) -> int:
-        return self.tokenizer.encode(self.replacement_token, add_special_tokens=False)[0]
+        return self.replacement_token
 
     def __str__(self):
         return "fixed"
