@@ -123,6 +123,21 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         logger: Optional[ExperimentLogger] = None,
         verbose: int = 0,
     ) -> None:
+        """
+        Hierarchical pertubation method. Uses a sliding window to split the input into chunks and continues to subdivided each chunk until the attribution falls below the dynamic threshold.
+        Args:
+            input_prompt (str): The original input string.
+            init_chunk_size (int): The initial chunk size for splitting the input.
+            stride (Optional[int]): The stride for sliding the window. Defaults to None.
+            perturbation_strategy (PerturbationStrategy): The perturbation strategy to use. Defaults to FixedPerturbationStrategy().
+            attribution_strategies (list[str]): The list of attribution strategies to use. Defaults to ["cosine", "prob_diff"].
+            static_threshold (Optional[float]): The static threshold for chunk attribution scores at each depth. Defaults to None.
+            use_absolute_attribution (bool): Flag indicating whether to use absolute attribution scores in dynamic threshold calculation. Defaults to False.
+            unit_definition (Literal["token", "word"]): The unit definition for splitting the input. Defaults to "token".
+            ignore_output_token_location (bool): Flag indicating whether to ignore the output token location. Defaults to True.
+            logger (Optional[ExperimentLogger]): The experiment logger. Defaults to None.
+            verbose (bool): Flag indicating whether to print verbose output. Defaults to False.
+        """
         llm_input = LLMInput(
             input_string=original_input, tokenizer=self.tokenizer, unit_definition=unit_definition
         )
@@ -181,6 +196,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
             for i, (perturbation, output, mask) in enumerate(zip(perturbations, outputs, masks)):
                 for strategy in attribution_strategies:
+                    # Logging each attribution strategy metric
                     attribution_scores, norm_attribution_scores = self._get_scores(
                         perturbation=perturbation,
                         perturbed_output=output,
@@ -192,7 +208,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                         depth=stage,
                     )
 
-                    # For threshold calculation and comparison we only use the first attribution strategy
+                    # For scoring we only use the first attribution strategy
                     if strategy == attribution_strategies[0]:
                         chunk_scores.append(attribution_scores["total_attribution"])
                         unit_attribution[i, mask] = norm_attribution_scores["total_attribution"]

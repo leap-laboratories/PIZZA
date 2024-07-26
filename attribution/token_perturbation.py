@@ -18,19 +18,17 @@ class PerturbationStrategy:
 
 
 class FixedPerturbationStrategy(PerturbationStrategy):
-    def __init__(self, replacement_token="", tokenizer: Optional[PreTrainedTokenizer] = None):
-        self.replacement_token = replacement_token
+    def __init__(
+        self, replacement_token: str = "", tokenizer: Optional[PreTrainedTokenizer] = None
+    ):
+        self.replacement_token = replacement_token if replacement_token != " " else "Ġ"
         self.tokenizer = tokenizer or GPT2Tokenizer.from_pretrained("gpt2", add_prefix_space=True)
-        replacement_token = self.tokenizer.encode(self.replacement_token, add_special_tokens=False)
-        if len(replacement_token) > 1:
-            raise ValueError("The replacement token must be a single token, or empty.")
-        self.replacement_token = replacement_token[0]
 
     def get_replacement_units(self, units_to_replace: list[Unit]) -> list[Unit]:
         return [self.get_replacement_token(0)]
 
     def get_replacement_token(self, token_id_to_replace: int) -> Unit:
-        if self.replacement_token == "":
+        if self.replacement_token in ("", "Ġ"):
             return [self.replacement_token]
         else:
             return [f"Ġ{self.replacement_token}"]
@@ -255,12 +253,23 @@ def combine_unit(tokens: list[str]) -> str:
 def get_masks(
     input_size: int, window_size: int, stride: Optional[int] = None
 ) -> list[npt.NDArray[np.bool_]]:
-    # Generating masks with a sliding window defined by window_size and stride
+    """
+    Generates masks with a sliding window defined by window_size and stride.
+
+    Args:
+        input_size (int): The size of the input.
+        window_size (int): The size of the sliding window.
+        stride (Optional[int]): The stride of the sliding window. If not provided, it is set to window_size. Defaults to None.
+
+    Returns:
+        list[npt.NDArray[np.bool_]]: A list of boolean masks.
+
+    """
     if stride is None:
         stride = window_size
 
     # Padding the input to ensure the sliding window is centered
-    padding = stride // 2
+    padding = window_size // 2
     masks: list[npt.NDArray[np.bool_]] = []
     for start in range(-padding, input_size + padding, stride):
         end = min(start + window_size, input_size)

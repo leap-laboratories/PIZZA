@@ -184,7 +184,7 @@ class ExperimentLogger:
         color_hex = mcolors.to_hex(rgba_color)
         return color_hex
 
-    def print_text_total_attribution(self, exp_id: Optional[int] = None, score_agg: Literal["mean", "last"] = "mean"):
+    def print_text_total_attribution(self, exp_id: Optional[int] = None, score_agg: Literal["mean", "sum", "last"] = "mean"):
 
         if exp_id == -1:
             exp_id = self.df_experiments["exp_id"].max()
@@ -331,7 +331,7 @@ class ExperimentLogger:
         exp_id: int = -1,
         attribution_strategy: Optional[str] = None,
         show_debug_cols: bool = False,
-        score_agg: Literal["mean", "last"] = "mean",
+        score_agg: Literal["mean", "sum", "last"] = "mean",
     ):
         if exp_id == -1:
             exp_id = self.df_experiments["exp_id"].max()
@@ -384,6 +384,10 @@ class ExperimentLogger:
             matrix.index = input_tokens_with_pos
             matrix.columns = output_tokens_with_pos
 
+            print(
+                f"Attribution matrix for experiment {exp_id} \nAttribution Strategy: {attribution_strategy} \nPerturbation strategy: {perturbation_strategy}:"
+            )
+            print("Input Tokens (Rows) vs. Output Tokens (Columns)")
 
             if show_debug_cols:
                 additional_columns = exp_data[
@@ -442,12 +446,12 @@ class ExperimentLogger:
         return df_pivot
 
     def _aggregate_attr_score_df(
-        self, df: pd.DataFrame, score_agg: Literal["mean", "last"]
+        self, df: pd.DataFrame, score_agg: Literal["mean", "sum", "last"]
     ) -> pd.DataFrame:
         """
         Aggregate duplicate perturbed tokens, only relevant for hierarchical perturbation methods
         df: DataFrame containing the token attribution scores (generally one of the attribution tables)
-        score_agg: Method to aggregate the scores, either "mean" with produces a saliency map, or "last" which gives scores similar to the non-hierarchical method
+        score_agg: Method to aggregate the scores, either "mean" across all depths, "sum" which produces a saliency map, or "last" which gives scores similar to the non-hierarchical method
         """
 
         aggregation_dict = dict.fromkeys(df.columns, "last")
