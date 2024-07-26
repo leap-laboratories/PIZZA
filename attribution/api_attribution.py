@@ -174,6 +174,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
             for i, (perturbation, output, mask) in enumerate(zip(perturbations, outputs, masks)):
                 for strategy in attribution_strategies:
+                    # Logging each attribution strategy metric
                     attribution_scores, norm_attribution_scores = self._get_scores(
                         perturbation=perturbation,
                         perturbed_output=output,
@@ -185,7 +186,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                         depth=stage,
                     )
 
-                    # For threshold calculation and comparison we only use the first attribution strategy
+                    # For threshold calculation and comparison we only use the first attribution strategy metric
                     if strategy == attribution_strategies[0]:
                         chunk_scores.append(attribution_scores["sentence_attribution"])
                         unit_attribution[i, mask] = norm_attribution_scores["sentence_attribution"]
