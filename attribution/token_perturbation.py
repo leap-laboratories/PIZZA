@@ -18,15 +18,17 @@ class PerturbationStrategy:
 
 
 class FixedPerturbationStrategy(PerturbationStrategy):
-    def __init__(self, replacement_token="", tokenizer: Optional[PreTrainedTokenizer] = None):
-        self.replacement_token = replacement_token
+    def __init__(
+        self, replacement_token: str = "", tokenizer: Optional[PreTrainedTokenizer] = None
+    ):
+        self.replacement_token = replacement_token if replacement_token != " " else "Ġ"
         self.tokenizer = tokenizer or GPT2Tokenizer.from_pretrained("gpt2", add_prefix_space=True)
 
     def get_replacement_units(self, units_to_replace: list[Unit]) -> list[Unit]:
         return [self.get_replacement_token(0)]
 
     def get_replacement_token(self, token_id_to_replace: int) -> Unit:
-        if self.replacement_token == "":
+        if self.replacement_token in ("", "Ġ"):
             return [self.replacement_token]
         else:
             return [f"Ġ{self.replacement_token}"]
