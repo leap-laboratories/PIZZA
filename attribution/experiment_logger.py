@@ -384,11 +384,6 @@ class ExperimentLogger:
             matrix.index = input_tokens_with_pos
             matrix.columns = output_tokens_with_pos
 
-            print(
-                f"Attribution matrix for experiment {exp_id} \nAttribution Strategy: {attribution_strategy} \nPerturbation strategy: {perturbation_strategy}:"
-            )
-            print("Input Tokens (Rows) vs. Output Tokens (Columns)")
-
             if show_debug_cols:
                 additional_columns = exp_data[
                     ["input_token_pos", "perturbed_input", "perturbed_output"]
