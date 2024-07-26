@@ -267,7 +267,7 @@ def get_masks(
         stride = window_size
 
     # Padding the input to ensure the sliding window is centered
-    padding = stride // 2
+    padding = window_size // 2
     masks: list[npt.NDArray[np.bool_]] = []
     for start in range(-padding, input_size + padding, stride):
         end = min(start + window_size, input_size)
