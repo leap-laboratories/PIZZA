@@ -122,6 +122,21 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         logger: Optional[ExperimentLogger] = None,
         verbose: bool = False,
     ) -> None:
+        """
+        Hierarchical pertubation method. Uses a sliding window to split the input into chunks and continues to subdivided each chunk until the attribution falls below the dynamic threshold.
+        Args:
+            input_prompt (str): The original input string.
+            init_chunk_size (int): The initial chunk size for splitting the input.
+            stride (Optional[int]): The stride for sliding the window. Defaults to None.
+            perturbation_strategy (PerturbationStrategy): The perturbation strategy to use. Defaults to FixedPerturbationStrategy().
+            attribution_strategies (list[str]): The list of attribution strategies to use. Defaults to ["cosine", "prob_diff"].
+            static_threshold (Optional[float]): The static threshold for chunk attribution scores at each depth. Defaults to None.
+            use_absolute_attribution (bool): Flag indicating whether to use absolute attribution scores in dynamic threshold calculation. Defaults to False.
+            unit_definition (Literal["token", "word"]): The unit definition for splitting the input. Defaults to "token".
+            ignore_output_token_location (bool): Flag indicating whether to ignore the output token location. Defaults to True.
+            logger (Optional[ExperimentLogger]): The experiment logger. Defaults to None.
+            verbose (bool): Flag indicating whether to print verbose output. Defaults to False.
+        """
         llm_input = LLMInput(
             input_string=original_input, tokenizer=self.tokenizer, unit_definition=unit_definition
         )
