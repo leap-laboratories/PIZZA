@@ -251,7 +251,18 @@ def combine_unit(tokens: list[str]) -> str:
 def get_masks(
     input_size: int, window_size: int, stride: Optional[int] = None
 ) -> list[npt.NDArray[np.bool_]]:
-    # Generating masks with a sliding window defined by window_size and stride
+    """
+    Generates masks with a sliding window defined by window_size and stride.
+
+    Args:
+        input_size (int): The size of the input.
+        window_size (int): The size of the sliding window.
+        stride (Optional[int]): The stride of the sliding window. If not provided, it is set to window_size. Defaults to None.
+
+    Returns:
+        list[npt.NDArray[np.bool_]]: A list of boolean masks.
+
+    """
     if stride is None:
         stride = window_size
 
