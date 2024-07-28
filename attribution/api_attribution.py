@@ -35,7 +35,7 @@ load_dotenv()
 DEFAULT_OPENAI_MODEL = "gpt-3.5-turbo"
 REQUEST_DELAY = 0.1
 MIN_MAXIMUM_THRESHOLD = 0.01
-CHUNK_DIVISIOR = 8
+CHUNK_DIVISIOR = 2
 
 
 class OpenAIAttributor(BaseAsyncLLMAttributor):

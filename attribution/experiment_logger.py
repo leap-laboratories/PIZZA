@@ -10,6 +10,7 @@ from .token_perturbation import PerturbationStrategy, PerturbedLLMInput, combine
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 
+
 class ExperimentLogger:
     def __init__(self, experiment_id=0):
         self.experiment_id = experiment_id
@@ -200,6 +201,8 @@ class ExperimentLogger:
 
             tokens = self.clean_tokens(exp_data["input_token"].tolist())
             attr_scores = exp_data["attr_score"].tolist()
+            vmax = max(abs(min(attr_scores)), abs(max(attr_scores)))
+            vmin = -vmax
 
             token_dict = {f"token_{i+1}": t for i, t in enumerate(tokens)}
             score_dict = {f"token_{i+1}": score for i, score in enumerate(attr_scores)}
@@ -215,7 +218,7 @@ class ExperimentLogger:
             for col in df.columns:
                 token = df[col]["token"]
                 score = df[col]["attr_score"]
-                color = self.score_to_color(score)
+                color = self.score_to_color(score, vmin, vmax)
                 html_str += f'<span style="text-decoration: underline; text-decoration-color: {color}; text-decoration-thickness: 4px;">{token}</span>'
 
 
@@ -228,7 +231,7 @@ class ExperimentLogger:
                 from IPython.display import display
                 display(HTML(html_str))
             else:
-                print(df)
+                self.pretty_print(df)
 
 
     def print_text_attribution_matrix(self, exp_id: int = -1):
@@ -245,6 +248,9 @@ class ExperimentLogger:
             prev_output_str = ''.join([' '.join(ot.split(' ')[:-1]) for ot in matrix.columns[:oi]])
             following_output_str = ''.join([' '.join(ot.split(' ')[:-1]) for ot in matrix.columns[oi+1:]])
             attr_scores = matrix[output_token].tolist()
+            vmax = max(abs(min(attr_scores)), abs(max(attr_scores)))
+            vmin = -vmax
+
             score_dict = {f"token_{i+1}": score for i, score in enumerate(attr_scores)}
 
             df = pd.DataFrame([token_dict, score_dict], index=["token", "attr_score"])
@@ -254,7 +260,7 @@ class ExperimentLogger:
             for col in df.columns:
                 token = df[col]["token"]
                 score = df[col]["attr_score"]
-                color = self.score_to_color(score)
+                color = self.score_to_color(score, vmin, vmax)
                 html_str += f'<span style="text-decoration: underline; text-decoration-color: {color}; text-decoration-thickness: 4px;">{token}</span>'
 
             clean_output_token = ' '.join(output_token.split(' ')[:-1])
@@ -267,7 +273,7 @@ class ExperimentLogger:
                 from IPython.display import display
                 display(HTML(html_str))
             else:
-                print(df)
+                self.pretty_print(df)
 
 
     def print_total_attribution(self, exp_id: Optional[int] = None, score_agg: Literal["mean", "last"] = "mean"):
@@ -322,9 +328,9 @@ class ExperimentLogger:
 
         if get_ipython() and "IPKernelApp" in get_ipython().config:
             from IPython.display import display
-            display(matrix.style.background_gradient(cmap="coolwarm", vmin=-1, vmax=1))
+            display(matrix.style.background_gradient(cmap="coolwarm", vmin=-1, vmax=1).set_properties(**{"white-space": "pre-wrap"}))
         else:
-            print(matrix)
+            self.pretty_print(matrix)
 
     def get_attribution_matrix(
         self,
@@ -403,7 +409,6 @@ class ExperimentLogger:
         # Check if code is running in Jupyter notebook
         if get_ipython() and "IPKernelApp" in get_ipython().config:
             from IPython.display import display
-
             display(df.style.set_properties(**{"white-space": "pre-wrap"}))
         else:
             print(df.to_string())
