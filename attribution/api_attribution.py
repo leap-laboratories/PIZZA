@@ -116,6 +116,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         stride: Optional[int] = None,
         perturbation_strategy: PerturbationStrategy = FixedPerturbationStrategy(),
         attribution_strategies: list[str] = ["prob_diff"],
+        threshold_attribution_strategy: Optional[str] = None,
         static_threshold: Optional[float] = None,
         use_absolute_attribution: bool = False,
         unit_definition: Literal["token", "word"] = "token",
@@ -134,10 +135,17 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             static_threshold (Optional[float]): The static threshold for chunk attribution scores at each depth. Defaults to None.
             use_absolute_attribution (bool): Flag indicating whether to use absolute attribution scores in dynamic threshold calculation. Defaults to False.
             unit_definition (Literal["token", "word"]): The unit definition for splitting the input. Defaults to "token".
+            threshold_attribution_strategy (Optional[str]): The attribution strategy to use for threshold calculation. Only relevant when multiple attribution_strategies are passed. Defaults to None (selects the first strategy if multiple provided).
             ignore_output_token_location (bool): Flag indicating whether to ignore the output token location. Defaults to True.
             logger (Optional[ExperimentLogger]): The experiment logger. Defaults to None.
             verbose (bool): Flag indicating whether to print verbose output. Defaults to False.
         """
+        threshold_attribution_strategy = threshold_attribution_strategy or attribution_strategies[0]
+        if threshold_attribution_strategy not in attribution_strategies:
+            raise ValueError(
+                f"Threshold attribution strategy must be one of the input attribution strategies: {attribution_strategies}, got '{threshold_attribution_strategy}'."
+            )
+
         llm_input = LLMInput(
             input_string=original_input, tokenizer=self.tokenizer, unit_definition=unit_definition
         )
@@ -208,10 +216,10 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                         depth=stage,
                     )
 
-                    # For scoring we only use the first attribution strategy
-                    if strategy == attribution_strategies[0]:
-                        chunk_scores.append(attribution_scores["total_attribution"])
-                        unit_attribution[i, mask] = norm_attribution_scores["total_attribution"]
+                    # Define threshold based on the chosen strategy
+                    if strategy == threshold_attribution_strategy:
+                        chunk_scores.append(attribution_scores["sentence_attribution"])
+                        unit_attribution[i, mask] = norm_attribution_scores["sentence_attribution"]
 
             # Filling units that were not perturbed with zeros to avoid full nan columns
             unperturbed_units = np.isnan(unit_attribution).all(axis=0)
