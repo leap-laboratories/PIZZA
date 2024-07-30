@@ -1,7 +1,7 @@
 import asyncio
 import os
 from copy import deepcopy
-from typing import List, Optional
+from typing import Any, Literal, Optional, cast
 
 import numpy as np
 import openai
@@ -22,22 +22,29 @@ from .base import BaseAsyncLLMAttributor
 from .experiment_logger import ExperimentLogger
 from .token_perturbation import (
     FixedPerturbationStrategy,
+    LLMInput,
     PerturbationStrategy,
+    PerturbedLLMInput,
+    get_masks,
+    split_mask,
 )
+from .types import StrictChoice
 
 load_dotenv()
 
 DEFAULT_OPENAI_MODEL = "gpt-3.5-turbo"
+REQUEST_DELAY = 0.1
+MIN_MAXIMUM_THRESHOLD = 0.01
 
 
 class OpenAIAttributor(BaseAsyncLLMAttributor):
     def __init__(
         self,
+        openai_model: str = DEFAULT_OPENAI_MODEL,
         openai_api_key: Optional[str] = None,
-        openai_model: Optional[str] = DEFAULT_OPENAI_MODEL,
         tokenizer: Optional[PreTrainedTokenizer] = None,
         token_embeddings: Optional[np.ndarray] = None,
-        request_chunksize: Optional[int] = 50,
+        max_concurrent_requests: Optional[int] = 50,
     ):
         openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
         self.openai_client = openai.AsyncOpenAI(api_key=openai_api_key)
@@ -46,11 +53,208 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         self.tokenizer = tokenizer or GPT2Tokenizer.from_pretrained("gpt2")
         self.token_embeddings = (
             token_embeddings
-            or GPT2LMHeadModel.from_pretrained("gpt2").transformer.wte.weight.detach().numpy()
+            or cast(GPT2LMHeadModel, GPT2LMHeadModel.from_pretrained("gpt2"))
+            .transformer.wte.weight.detach()
+            .numpy()
         )
-        self.request_chunksize = request_chunksize
+        self.max_concurrent_requests = max_concurrent_requests
 
-    async def get_chat_completion(self, input: str) -> openai.types.chat.chat_completion.Choice:
+    async def compute_attributions(
+        self,
+        original_input: str,
+        perturbation_strategy: PerturbationStrategy = FixedPerturbationStrategy(),
+        attribution_strategies: list[str] = ["cosine", "prob_diff"],
+        logger: Optional[ExperimentLogger] = None,
+        unit_definition: Literal["token", "word"] = "token",
+        ignore_output_token_location: bool = True,
+    ):
+        llm_input = LLMInput(
+            input_string=original_input, tokenizer=self.tokenizer, unit_definition=unit_definition
+        )
+        original_output = await self.get_chat_completion(llm_input.input_string)
+
+        if logger:
+            logger.start_experiment(
+                original_input,
+                original_output.message.content,
+                perturbation_strategy,
+                unit_definition,
+            )
+
+        perturbations: list[PerturbedLLMInput] = []
+        for i_unit in range(len(llm_input.unit_tokens)):
+            perturbation = PerturbedLLMInput(
+                original=llm_input,
+                perturb_unit_ids=[i_unit],
+                strategy=perturbation_strategy,
+            )
+            perturbations.append(perturbation)
+
+        outputs = await self.get_multiple_completions(
+            [perturbation.perturbed_string for perturbation in perturbations]
+        )
+
+        for perturbation, output in zip(perturbations, outputs):
+            for strategy in attribution_strategies:
+                _ = self._get_scores(
+                    perturbation=perturbation,
+                    perturbed_output=output,
+                    original_output=original_output,
+                    attribution_strategy=strategy,
+                    ignore_output_token_location=ignore_output_token_location,
+                    logger=logger,
+                )
+
+        if logger:
+            logger.stop_experiment(num_llm_calls=len(outputs) + 1)
+
+    async def hierarchical_perturbation(
+        self,
+        original_input: str,
+        init_chunk_size: int,
+        stride: Optional[int] = None,
+        perturbation_strategy: PerturbationStrategy = FixedPerturbationStrategy(),
+        attribution_strategies: list[str] = ["cosine", "prob_diff"],
+        threshold_attribution_strategy: Optional[str] = None,
+        static_threshold: Optional[float] = None,
+        use_absolute_attribution: bool = False,
+        unit_definition: Literal["token", "word"] = "token",
+        ignore_output_token_location: bool = True,
+        logger: Optional[ExperimentLogger] = None,
+        verbose: bool = False,
+    ) -> None:
+        """
+        Hierarchical pertubation method. Uses a sliding window to split the input into chunks and continues to subdivided each chunk until the attribution falls below the dynamic threshold.
+        Args:
+            input_prompt (str): The original input string.
+            init_chunk_size (int): The initial chunk size for splitting the input.
+            stride (Optional[int]): The stride for sliding the window. Defaults to None.
+            perturbation_strategy (PerturbationStrategy): The perturbation strategy to use. Defaults to FixedPerturbationStrategy().
+            attribution_strategies (list[str]): The list of attribution strategies to use. Defaults to ["cosine", "prob_diff"].
+            static_threshold (Optional[float]): The static threshold for chunk attribution scores at each depth. Defaults to None.
+            use_absolute_attribution (bool): Flag indicating whether to use absolute attribution scores in dynamic threshold calculation. Defaults to False.
+            unit_definition (Literal["token", "word"]): The unit definition for splitting the input. Defaults to "token".
+            threshold_attribution_strategy (Optional[str]): The attribution strategy to use for threshold calculation. Only relevant when multiple attribution_strategies are passed. Defaults to None (selects the first strategy if multiple provided).
+            ignore_output_token_location (bool): Flag indicating whether to ignore the output token location. Defaults to True.
+            logger (Optional[ExperimentLogger]): The experiment logger. Defaults to None.
+            verbose (bool): Flag indicating whether to print verbose output. Defaults to False.
+        """
+        threshold_attribution_strategy = threshold_attribution_strategy or attribution_strategies[0]
+        if threshold_attribution_strategy not in attribution_strategies:
+            raise ValueError(
+                f"Threshold attribution strategy must be one of the input attribution strategies: {attribution_strategies}, got '{threshold_attribution_strategy}'."
+            )
+
+        llm_input = LLMInput(
+            input_string=original_input, tokenizer=self.tokenizer, unit_definition=unit_definition
+        )
+
+        original_output = await self.get_chat_completion(llm_input.input_string)
+        if logger:
+            logger.start_experiment(
+                original_input,
+                original_output.message.content,
+                perturbation_strategy,
+                unit_definition,
+            )
+
+        # Defining boolean masks via a sliding window to split the input into chunks
+        unit_count = len(llm_input.unit_tokens)
+        masks = get_masks(unit_count, init_chunk_size, stride)
+
+        comparator = np.abs if use_absolute_attribution else lambda x: x
+        cumulative_unit_attribution = np.zeros(unit_count)
+        total_llm_calls = 1
+        stage = 0
+
+        # Main loop for hierarchical perturbation, run until masks cannot be further subdivided
+        while masks:
+            print(f"Stage {stage}: making {len(masks)} perturbations")
+            # Define perturbations for each mask
+            perturbations: list[PerturbedLLMInput] = []
+            for mask in masks:
+                perturbations.append(
+                    PerturbedLLMInput(
+                        original=llm_input,
+                        strategy=perturbation_strategy,
+                        perturb_unit_ids=np.where(mask)[0].tolist(),
+                    )
+                )
+
+            if verbose:
+                print("Masked out tokens/words:")
+                print(*[[perturbation.masked_string] for perturbation in perturbations], sep="\n")
+
+            # Wait for the perturbed results
+            outputs = await self.get_multiple_completions(
+                [perturbation.perturbed_string for perturbation in perturbations]
+            )
+            total_llm_calls += len(outputs)
+
+            # Calculate attribution scores for each perturbation
+            chunk_scores = []
+            unit_attribution = np.full((len(masks), unit_count), np.nan)
+
+            for i, (perturbation, output, mask) in enumerate(zip(perturbations, outputs, masks)):
+                for strategy in attribution_strategies:
+                    # Logging each attribution strategy metric
+                    attribution_scores, norm_attribution_scores = self._get_scores(
+                        perturbation=perturbation,
+                        perturbed_output=output,
+                        original_output=original_output,
+                        attribution_strategy=strategy,
+                        chunksize=sum(mask),
+                        ignore_output_token_location=ignore_output_token_location,
+                        logger=logger,
+                        depth=stage,
+                    )
+
+                    # Define threshold based on the chosen strategy
+                    if strategy == threshold_attribution_strategy:
+                        chunk_scores.append(attribution_scores["sentence_attribution"])
+                        unit_attribution[i, mask] = norm_attribution_scores["sentence_attribution"]
+
+            # Filling units that were not perturbed with zeros to avoid full nan columns
+            unperturbed_units = np.isnan(unit_attribution).all(axis=0)
+            unit_attribution[:, unperturbed_units] = 0
+
+            # Take mean of attribution scores and accumulate
+            unit_attribution = np.nanmean(unit_attribution, axis=0)
+            cumulative_unit_attribution += comparator(unit_attribution)
+
+            if np.max(cumulative_unit_attribution) > MIN_MAXIMUM_THRESHOLD:
+                # Calculate midrange threshold value
+                midrange_score = (
+                    np.max(cumulative_unit_attribution) + np.min(cumulative_unit_attribution)
+                ) / 2
+            else:
+                break
+
+            # Split masks if their scores exceed the midrange score or a static threshold
+            new_masks = []
+            for mask, chunk_attribution in zip(masks, chunk_scores):
+                cumulative_chunk_attribution = cumulative_unit_attribution[mask].mean()
+
+                if (
+                    cumulative_chunk_attribution >= midrange_score
+                    or (
+                        static_threshold is not None
+                        and comparator(chunk_attribution) > static_threshold
+                    )
+                ) and mask.sum() > 1:
+                    # Split the chunk in half
+                    mask1, mask2 = split_mask(mask)
+                    new_masks.append(mask1)
+                    new_masks.append(mask2)
+
+            # Ensure masks are unique and return top-level to list
+            masks = list(np.unique(new_masks, axis=0))
+            stage += 1
+
+        if logger:
+            logger.stop_experiment(num_llm_calls=total_llm_calls)
+
+    async def get_chat_completion(self, input: str) -> StrictChoice:
         response = await self.openai_client.chat.completions.create(
             model=self.openai_model,
             messages=[{"role": "user", "content": input}],
@@ -59,9 +263,34 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             logprobs=True,
             top_logprobs=20,
         )
-        return response.choices[0]
+        return StrictChoice(**response.choices[0].model_dump())
 
-    def make_output_location_invariant(self, original_output, perturbed_output):
+    async def get_multiple_completions(self, inputs: list[str]) -> list[StrictChoice]:
+        tasks = [asyncio.create_task(self.get_chat_completion(inp)) for inp in inputs]
+
+        # Get the output logprobs for the perturbed inputs
+        if self.max_concurrent_requests is not None and len(tasks) > self.max_concurrent_requests:
+            outputs = []
+            for idx in tqdm(
+                range(0, len(tasks), self.max_concurrent_requests),
+                desc=f"Sending {self.max_concurrent_requests:.0f} concurrent requests at a time",
+            ):
+                batch = [
+                    tasks[i]
+                    for i in range(idx, min(idx + self.max_concurrent_requests, len(tasks)))
+                ]
+                outputs.extend(await asyncio.gather(*batch))
+                await asyncio.sleep(REQUEST_DELAY)
+        else:
+            outputs = await asyncio.gather(*tasks)
+
+        return outputs
+
+    def _make_output_location_invariant(
+        self,
+        original_output: StrictChoice,
+        perturbed_output: StrictChoice,
+    ):
         # Making a copy of the original output, so we can update it with the perturbed output log probs, wherever a token from the unperturned output is found in the perturbed output.
         location_invariant_output = deepcopy(original_output)
 
@@ -108,142 +337,62 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         # Now the perturbed output contains the same tokens as the original output, but with the logprobs from the perturbed output.
         return location_invariant_output
 
-    async def compute_attributions(
+    def _get_scores(
         self,
-        input_text: str,
-        perturbation_strategy: PerturbationStrategy = FixedPerturbationStrategy(),
-        attribution_strategies: List[str] = ["cosine", "prob_diff"],
-        logger: Optional[ExperimentLogger] = None,
-        perturb_word_wise: bool = False,
+        perturbation: PerturbedLLMInput,
+        perturbed_output: StrictChoice,
+        original_output: StrictChoice,
+        attribution_strategy: str,
+        chunksize: int = 1,
         ignore_output_token_location: bool = True,
-    ):
-        original_output = await self.get_chat_completion(input_text)
+        depth: int = 0,
+        logger: Optional[ExperimentLogger] = None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        if ignore_output_token_location:
+            perturbed_output = self._make_output_location_invariant(
+                original_output, perturbed_output
+            )
 
-        if logger:
-            logger.start_experiment(
-                input_text,
+        if attribution_strategy == "cosine":
+            token_attributions = cosine_similarity_attribution(
                 original_output.message.content,
-                perturbation_strategy,
-                perturb_word_wise,
-            )
-
-        # A unit is either a word or a single token, depending on the value of `perturb_word_wise`
-        unit_offset = 0
-        if perturb_word_wise:
-            words = [" " + w for w in input_text.split()]
-            words[0] = words[0][1:]
-            tokens_per_unit = [self.tokenizer.tokenize(word) for word in words]
-            token_ids_per_unit = [
-                self.tokenizer.encode(word, add_special_tokens=False) for word in words
-            ]
-        else:
-            tokens_per_unit = [[token] for token in self.tokenizer.tokenize(input_text)]
-            token_ids_per_unit = [
-                [token_id]
-                for token_id in self.tokenizer.encode(input_text, add_special_tokens=False)
-            ]
-
-        tasks = []
-        perturbations = []
-        for i_unit, unit_tokens in enumerate(tokens_per_unit):
-            replacement_token_ids = [
-                perturbation_strategy.get_replacement_token(token_id)
-                for token_id in token_ids_per_unit[i_unit]
-            ]
-
-            # Replace the current word with the new tokens
-            left_token_ids = [
-                token_id
-                for unit_token_ids in token_ids_per_unit[:i_unit]
-                for token_id in unit_token_ids
-            ]
-            right_token_ids = [
-                token_id
-                for unit_token_ids in token_ids_per_unit[i_unit + 1 :]
-                for token_id in unit_token_ids
-            ]
-            perturbed_input = self.tokenizer.decode(
-                left_token_ids + replacement_token_ids + right_token_ids, skip_special_tokens=True
-            )
-
-            # Create task for the perturbed input
-            tasks.append(asyncio.create_task(self.get_chat_completion(perturbed_input)))
-            perturbations.append(
-                {
-                    "input": perturbed_input,
-                    "unit_tokens": unit_tokens,
-                    "replaced_token_ids": replacement_token_ids,
-                }
-            )
-
-        # Get the output logprobs for the perturbed inputs
-        if self.request_chunksize is not None and len(tasks) > self.request_chunksize:
-            outputs = []
-            for idx in tqdm(
-                range(0, len(tasks), self.request_chunksize),
-                desc=f"Sending {self.request_chunksize:.0f} concurrent requests at a time",
-            ):
-                batch = [
-                    tasks[i] for i in range(idx, min(idx + self.request_chunksize, len(tasks)))
-                ]
-                outputs.extend(await asyncio.gather(*batch))
-                await asyncio.sleep(0.1)
-        else:
-            outputs = await asyncio.gather(*tasks)
-
-        for perturbation, perturbed_output in zip(perturbations, outputs):
-            if ignore_output_token_location:
-                perturbed_output = self.make_output_location_invariant(
-                    original_output, perturbed_output
-                )
-
-            for attribution_strategy in attribution_strategies:
-                if attribution_strategy == "cosine":
-                    sentence_attr, attributed_tokens, token_attributions = (
-                        cosine_similarity_attribution(
-                            original_output.message.content,
-                            perturbed_output.message.content,
-                            self.token_embeddings,
-                            self.tokenizer,
-                        )
-                    )
-                elif attribution_strategy == "prob_diff":
-                    sentence_attr, attributed_tokens, token_attributions = token_prob_attribution(
-                        original_output.logprobs, perturbed_output.logprobs
-                    )
-                else:
-                    raise ValueError(f"Unknown attribution strategy: {attribution_strategy}")
-
-                if logger:
-                    for i, unit_token in enumerate(perturbation["unit_tokens"]):
-                        logger.log_input_token_attribution(
-                            attribution_strategy,
-                            unit_offset + i,
-                            unit_token,
-                            float(sentence_attr),
-                        )
-                        for j, attr_score in enumerate(token_attributions):
-                            logger.log_token_attribution_matrix(
-                                attribution_strategy,
-                                unit_offset + i,
-                                j,
-                                attributed_tokens[j],
-                                attr_score.squeeze(),
-                                perturbation["input"],
-                                perturbed_output.message.content,
-                            )
-            unit_offset += len(perturbation["unit_tokens"])
-
-        if logger:
-            logger.log_perturbation(
-                i,
-                self.tokenizer.decode(perturbation["replaced_token_ids"], skip_special_tokens=True)[
-                    0
-                ],
-                perturbation_strategy,
-                input_text,
-                original_output.message.content,
-                perturbation["input"],
                 perturbed_output.message.content,
+                self.token_embeddings,
+                self.tokenizer,
             )
-            logger.stop_experiment()
+        elif attribution_strategy == "prob_diff":
+            token_attributions = token_prob_attribution(
+                original_output.logprobs, perturbed_output.logprobs
+            )
+        else:
+            raise ValueError(f"Unknown attribution strategy: {attribution_strategy}")
+
+        scores = {
+            "sentence_attribution": np.mean(list(token_attributions.values())),
+            "token_attribution": token_attributions,
+        }
+        norm_scores = {
+            "sentence_attribution": np.mean(list(token_attributions.values())) / chunksize,
+            "token_attribution": {k: v / chunksize for k, v in token_attributions.items()},
+        }
+
+        if logger:
+            logger.log_attributions(
+                perturbation=perturbation,
+                attribution_scores=norm_scores,
+                strategy=attribution_strategy,
+                output=perturbed_output.message.content,
+                depth=depth,
+            )
+
+            logger.log_perturbation(
+                perturbation_pos=len(perturbation.masked_units) - 1,
+                perturbation_token=perturbation.masked_string,
+                perturbation_strategy=str(attribution_strategy),
+                original_input=perturbation.original.input_string,
+                original_output=original_output.message.content,
+                perturbed_input=perturbation.perturbed_string,
+                perturbed_output=perturbed_output.message.content,
+            )
+
+        return scores, norm_scores
