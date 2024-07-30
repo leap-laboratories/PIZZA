@@ -130,7 +130,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             init_chunk_size (int): The initial chunk size for splitting the input.
             stride (Optional[int]): The stride for sliding the window. Defaults to None.
             perturbation_strategy (PerturbationStrategy): The perturbation strategy to use. Defaults to FixedPerturbationStrategy().
-            attribution_strategies (list[str]): The list of attribution strategies to use. Defaults to ["cosine", "prob_diff"].
+            attribution_strategies (list[str]): The list of attribution strategies to use. Defaults to ["prob_diff"].
             static_threshold (Optional[float]): The static threshold for chunk attribution scores at each depth. Defaults to None.
             use_absolute_attribution (bool): Flag indicating whether to use absolute attribution scores in dynamic threshold calculation. Defaults to False.
             unit_definition (Literal["token", "word"]): The unit definition for splitting the input. Defaults to "token".

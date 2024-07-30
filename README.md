@@ -8,6 +8,7 @@ PIZZA: an LLM Attribution Library © 2024 by [Leap Laboratories](https://www.lea
 It can be used with OpenAI LLMs accessible through an API:
 
 ![API-accessible LLM Attribution Table](docs/assets/api-PIZZA.png)
+![API-accessible LLM Attribution Table](docs/assets/api-PIZZA-2.png)
 
 and local LLMs:
 
@@ -18,6 +19,11 @@ and local LLMs:
 - [PIZZA](#pizza)
   - [Index](#index)
   - [Quickstart](#quickstart)
+    - [Attribution via OpenAI's API](#attribution-via-openais-api)
+      - [Iterative perturbation](#iterative-perturbation)
+      - [Hierarchical perturbation](#hierarchical-perturbation)
+    - [Local attribution](#local-attribution)
+      - [Using gradient-based attribution for gemma-2b](#using-gradient-based-attribution-for-gemma-2b)
   - [Requirements](#requirements)
     - [Packaging](#packaging)
     - [Linting](#linting)
@@ -27,6 +33,7 @@ and local LLMs:
     - [LocalLLMAttributor](#localllmattributor)
       - [Cleaning Up](#cleaning-up)
     - [OpenAIAttributor](#openaiattributor)
+      - [Attribution methods](#attribution-methods)
     - [PerturbationStrategy and AttributionStrategy](#perturbationstrategy-and-attributionstrategy)
     - [ExperimentLogger](#experimentlogger)
   - [Limitations](#limitations)
@@ -45,14 +52,13 @@ and local LLMs:
 
 The `OpenAIAttributor` is asynchronous and will make multiple requests concurrently, so make sure to check your OpenAI limits and set `max_concurrent_requests` accordingly.
 
-#### Perturbing each token individually
+#### Iterative perturbation
 
 ```python
 import asyncio
 
 from attribution.api_attribution import OpenAIAttributor
 from attribution.experiment_logger import ExperimentLogger
-from attribution.token_perturbation import NthNearestPerturbationStrategy
 
 # set your "OPENAI_API_KEY" environment variable to your openai API key, or pass it here:
 attributor = OpenAIAttributor(
@@ -65,26 +71,21 @@ logger = ExperimentLogger()
 input_text = "The clock shows 9:47 PM. How many minutes 'til 10?"
 attribution_task = attributor.compute_attributions(
     input_text,
-    perturbation_strategy=NthNearestPerturbationStrategy(n=-1),
-    attribution_strategies=["cosine", "prob_diff"],
     logger=logger,
-    unit_definition="word",
 )
 
 asyncio.run(attribution_task)
 
-logger.print_total_attribution()
-logger.print_attribution_matrix(exp_id=1)
+logger.print_attribution_matrix()
 ```
 
-#### Using hierarchical perturbation
+#### Hierarchical perturbation
 
 ```python
 import asyncio
 
 from attribution.api_attribution import OpenAIAttributor
 from attribution.experiment_logger import ExperimentLogger
-from attribution.token_perturbation import FixedPerturbationStrategy
 
 attributor = OpenAIAttributor(
     openai_api_key=YOUR_OPENAI_API_KEY,
@@ -96,18 +97,11 @@ logger = ExperimentLogger()
 input_text = "The clock shows 9:47 PM. How many minutes 'til 10?"
 attribution_task = attributor.hierarchical_perturbation(
     input_text,
-    init_chunk_size=4,
-    perturbation_strategy=FixedPerturbationStrategy(),
-    attribution_strategies=["cosine", "prob_diff"],
-    static_threshold=0.5,
-    logger=logger,
-    unit_definition="word",
+    logger=logger
 )
 
 asyncio.run(attribution_task)
-
-logger.print_total_attribution()
-logger.print_attribution_matrix(exp_id=1)
+logger.print_attribution_matrix()
 ```
 
 ### Local attribution
