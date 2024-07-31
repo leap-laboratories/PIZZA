@@ -122,7 +122,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         unit_definition: Literal["token", "word"] = "token",
         ignore_output_token_location: bool = True,
         logger: Optional[ExperimentLogger] = None,
-        verbose: int = 0,
+        verbosity: int = 0,
     ) -> None:
         """
         Hierarchical pertubation method. Uses a sliding window to split the input into chunks and continues to subdivided each chunk until the attribution falls below the dynamic threshold.
@@ -138,7 +138,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             threshold_attribution_strategy (Optional[str]): The attribution strategy to use for threshold calculation. Only relevant when multiple attribution_strategies are passed. Defaults to None (selects the first strategy if multiple provided).
             ignore_output_token_location (bool): Flag indicating whether to ignore the output token location. Defaults to True.
             logger (Optional[ExperimentLogger]): The experiment logger. Defaults to None.
-            verbose (bool): Flag indicating whether to print verbose output. Defaults to False.
+            verbosity (int): Flag indicates how much information to print. Defaults to 0. Max = 2. 
         """
         threshold_attribution_strategy = threshold_attribution_strategy or attribution_strategies[0]
         if threshold_attribution_strategy not in attribution_strategies:
@@ -175,7 +175,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
         # Main loop for hierarchical perturbation, run until masks cannot be further subdivided
         while masks:
-            if verbose > 0:
+            if verbosity > 0:
                 print(f"Stage {stage}: making {len(masks)} perturbations")
             # Define perturbations for each mask
             perturbations: list[PerturbedLLMInput] = []
@@ -188,7 +188,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                     )
                 )
 
-            if verbose > 1:
+            if verbosity > 1:
                 print("Masked out tokens/words:")
                 print(*[[perturbation.masked_string] for perturbation in perturbations], sep=" ")
 

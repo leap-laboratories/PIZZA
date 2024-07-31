@@ -11,6 +11,9 @@ from IPython.display import HTML
 
 from .token_perturbation import PerturbationStrategy, PerturbedLLMInput, combine_unit
 
+DIV_STYLE_STR = '<div style="font-family: monospace; line-height: 1.5;">'
+SPAN_STYLE_COLOR_STR = '<span style="text-decoration: underline; text-decoration-color: #color#; text-decoration-thickness: 4px; text-underline-offset: 3px;">'
+SPAN_STYLE_STR = '<span style="text-decoration: underline; text-decoration-thickness: 4px; text-underline-offset: 3px;">'
 
 class ExperimentLogger:
     def __init__(self, experiment_id=0):
@@ -179,8 +182,9 @@ class ExperimentLogger:
         return [token.replace("Ġ", " ") for token in tokens]
 
     def score_to_color(self, score, vmin=-1, vmax=1):
+        #Setting vmin and vmax to -1 and 1 centers the scores around 0.
         norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
-        cmap = plt.cm.coolwarm
+        cmap = plt.cm.seismic
         rgba_color = cmap(norm(score))
         color_hex = mcolors.to_hex(rgba_color)
         return color_hex
@@ -199,14 +203,12 @@ class ExperimentLogger:
             ].groupby(["exp_id", "attribution_strategy"])
         )
 
-        for (exp_id, attr_strat), exp_data in token_attrs_df:
+        for (exp_id, _), exp_data in token_attrs_df:
             if exp_data["input_token_pos"].duplicated().any():
                 exp_data = self._aggregate_attr_score_df(exp_data, score_agg)
 
             tokens = self.clean_tokens(exp_data["input_token"].tolist())
             attr_scores = exp_data["attr_score"].tolist()
-            vmax = max(abs(min(attr_scores)), abs(max(attr_scores)))
-            vmin = -vmax
 
             token_dict = {f"token_{i+1}": t for i, t in enumerate(tokens)}
             score_dict = {f"token_{i+1}": score for i, score in enumerate(attr_scores)}
@@ -218,14 +220,15 @@ class ExperimentLogger:
             df = pd.DataFrame([token_dict, score_dict], index=["token", "attr_score"])
 
             # Generating HTML
-            html_str = '<div style="font-family: monospace;">'
+            html_str = DIV_STYLE_STR
             for col in df.columns:
                 token = df[col]["token"]
                 score = df[col]["attr_score"]
-                color = self.score_to_color(score, vmin, vmax)
-                html_str += f'<span style="text-decoration: underline; text-decoration-color: {color}; text-decoration-thickness: 4px;">{token}</span>'
+                color = self.score_to_color(score)
+                html_str += SPAN_STYLE_COLOR_STR.replace('#color#', color) + token + '</span>'
 
-            html_str += f" -> <b>{output}</b>"
+            
+            html_str += ' -> ' + output
             html_str += "</div>"
 
             # Display
@@ -252,23 +255,21 @@ class ExperimentLogger:
                 [" ".join(ot.split(" ")[:-1]) for ot in matrix.columns[oi + 1 :]]
             )
             attr_scores = matrix[output_token].tolist()
-            vmax = max(abs(min(attr_scores)), abs(max(attr_scores)))
-            vmin = -vmax
 
             score_dict = {f"token_{i+1}": score for i, score in enumerate(attr_scores)}
 
             df = pd.DataFrame([token_dict, score_dict], index=["token", "attr_score"])
 
             # Generating HTML
-            html_str = '<div style="font-family: monospace;">'
+            html_str = DIV_STYLE_STR
             for col in df.columns:
                 token = df[col]["token"]
                 score = df[col]["attr_score"]
-                color = self.score_to_color(score, vmin, vmax)
-                html_str += f'<span style="text-decoration: underline; text-decoration-color: {color}; text-decoration-thickness: 4px;">{token}</span>'
+                color = self.score_to_color(score)
+                html_str += SPAN_STYLE_COLOR_STR.replace('#color#', color) + token + '</span>'
 
             clean_output_token = " ".join(output_token.split(" ")[:-1])
-            html_str += f" -> {prev_output_str}<b>{clean_output_token}</b>{following_output_str}"
+            html_str += ' -> ' + prev_output_str + SPAN_STYLE_STR + clean_output_token + '</span>' + following_output_str
             html_str += "</div>"
 
             # Display
@@ -295,7 +296,7 @@ class ExperimentLogger:
             ].groupby(["exp_id", "attribution_strategy"])
         )
 
-        for (exp_id, attr_strat), exp_data in token_attrs_df:
+        for (exp_id, attr_strategy), exp_data in token_attrs_df:
             if exp_data["input_token_pos"].duplicated().any():
                 exp_data = self._aggregate_attr_score_df(exp_data, score_agg)
 
@@ -313,7 +314,7 @@ class ExperimentLogger:
 
             total_data = {
                 "exp_id": exp_id,
-                "attribution_strategy": attr_strat,
+                "attribution_strategy": attr_strategy,
                 "perturbation_strategy": perturbation_strategy,
                 "unit_definition": unit_definition,
             }
@@ -342,7 +343,7 @@ class ExperimentLogger:
             from IPython.display import display
 
             display(
-                matrix.style.background_gradient(cmap="coolwarm", vmin=-1, vmax=1).set_properties(
+                matrix.style.background_gradient(cmap="seismic", vmin=-1, vmax=1).set_properties(
                     **{"white-space": "pre-wrap"}
                 )
             )
