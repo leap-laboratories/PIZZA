@@ -218,8 +218,8 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
                     # Define threshold based on the chosen strategy
                     if strategy == threshold_attribution_strategy:
-                        chunk_scores.append(attribution_scores["sentence_attribution"])
-                        unit_attribution[i, mask] = norm_attribution_scores["sentence_attribution"]
+                        chunk_scores.append(attribution_scores["total_attribution"])
+                        unit_attribution[i, mask] = norm_attribution_scores["total_attribution"]
 
             # Filling units that were not perturbed with zeros to avoid full nan columns
             unperturbed_units = np.isnan(unit_attribution).all(axis=0)
