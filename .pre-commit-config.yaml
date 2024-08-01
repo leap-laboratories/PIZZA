@@ -7,6 +7,9 @@ repos:
       - id: ruff
         types_or: [python, pyi, jupyter]
         args: [--fix]
+        files: ^attribution/
+      
       # Run the formatter.
       - id: ruff-format
         types_or: [python, pyi, jupyter]
+        files: ^attribution/

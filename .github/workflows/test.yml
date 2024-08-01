@@ -20,8 +20,13 @@ jobs:
           python -m pip install uv
           uv pip install --system -r requirements-dev.txt
 
-      - name: Lint
-        uses: chartboost/ruff-action@v1
+      - name: Check formatting
+        run: ruff format --check
+        working-directory: attribution
+
+      - name: Lint source
+        run: ruff check
+        working-directory: attribution
 
       - name: Unit test
         run: python -m pytest tests/unit
