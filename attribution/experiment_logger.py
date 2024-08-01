@@ -192,8 +192,9 @@ class ExperimentLogger:
     def print_text_total_attribution(
         self, exp_id: Optional[int] = None, score_agg: Literal["mean", "sum", "last"] = "mean"
     ):
-        if exp_id == -1:
-            exp_id = self.df_experiments["exp_id"].max()
+        
+        if exp_id is not None and exp_id < 0:
+            exp_id = self.df_experiments["exp_id"].max() + 1 + exp_id
 
         token_attrs_df = (
             self.df_input_token_attribution.groupby(["exp_id", "attribution_strategy"])
@@ -241,8 +242,8 @@ class ExperimentLogger:
                 self.pretty_print(df)
 
     def print_text_attribution_matrix(self, exp_id: int = -1):
-        if exp_id == -1:
-            exp_id = self.df_experiments["exp_id"].max()
+        if exp_id is not None and exp_id < 0:
+            exp_id = self.df_experiments["exp_id"].max() + 1 + exp_id
 
         matrix = self.get_attribution_matrix(exp_id)
 
@@ -285,8 +286,8 @@ class ExperimentLogger:
         self, exp_id: Optional[int] = None, score_agg: Literal["mean", "last"] = "mean"
     ):
         totals = []
-        if exp_id == -1:
-            exp_id = self.df_experiments["exp_id"].max()
+        if exp_id is not None and exp_id < 0:
+            exp_id = self.df_experiments["exp_id"].max() + 1 + exp_id
 
         token_attrs_df = (
             self.df_input_token_attribution.groupby(["exp_id", "attribution_strategy"])
@@ -333,8 +334,8 @@ class ExperimentLogger:
         show_debug_cols: bool = False,
         score_agg: Literal["mean", "last"] = "mean",
     ):
-        if exp_id == -1:
-            exp_id = self.df_experiments["exp_id"].max()
+        if exp_id is not None and exp_id < 0:
+            exp_id = self.df_experiments["exp_id"].max() + 1 + exp_id
         matrix = self.get_attribution_matrix(
             exp_id, attribution_strategy, show_debug_cols, score_agg
         )
@@ -357,8 +358,8 @@ class ExperimentLogger:
         show_debug_cols: bool = False,
         score_agg: Literal["mean", "sum", "last"] = "mean",
     ):
-        if exp_id == -1:
-            exp_id = self.df_experiments["exp_id"].max()
+        if exp_id is not None and exp_id < 0:
+            exp_id = self.df_experiments["exp_id"].max() + 1 + exp_id
 
         if attribution_strategy is None:
             strategies = self.df_token_attribution_matrix[
