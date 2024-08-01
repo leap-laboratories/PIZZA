@@ -1,4 +1,5 @@
 # PIZZA
+
 PIZZA: an LLM Attribution Library © 2024 by [Leap Laboratories](https://www.leap-labs.com/) is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1)
 
 `P`rompt `I`nput `Z`onal `Z`? `A`ttribution analyzer
@@ -14,20 +15,20 @@ and local LLMs:
 
 ![Local LLM Attribution Table](docs/assets/local-PIZZA.png)
 
-## Index
-
 - [PIZZA](#pizza)
-  - [Index](#index)
+  - [Setup](#setup)
+    - [Requirements](#requirements)
+      - [Packaging](#packaging)
+      - [Linting](#linting)
+    - [Installation](#installation)
+    - [Initial Configuration](#initial-configuration)
+      - [Environment Variables](#environment-variables)
   - [Quickstart](#quickstart)
     - [Attribution via OpenAI's API](#attribution-via-openais-api)
       - [Iterative perturbation](#iterative-perturbation)
       - [Hierarchical perturbation](#hierarchical-perturbation)
     - [Local attribution](#local-attribution)
       - [Using gradient-based attribution for gemma-2b](#using-gradient-based-attribution-for-gemma-2b)
-  - [Requirements](#requirements)
-    - [Packaging](#packaging)
-    - [Linting](#linting)
-  - [Installation](#installation)
   - [API Design](#api-design)
     - [BaseLLMAttributor and BaseAsyncLLMAttributor](#basellmattributor-and-baseasyncllmattributor)
     - [LocalLLMAttributor](#localllmattributor)
@@ -44,11 +45,94 @@ and local LLMs:
   - [Testing](#testing)
   - [Research](#research)
 
+## Setup
+
+### Requirements
+
+#### Packaging
+
+This project uses [uv](https://github.com/astral-sh/uv) for package management. To install `uv`, follow the installation instructions in the [uv docs](https://github.com/astral-sh/uv?tab=readme-ov-file#getting-started).
+
+#### Linting
+
+This project uses [ruff](https://github.com/astral-sh/ruff) for linting and formatting. To install `ruff`, follow the installation instructions in the [ruff docs](https://github.com/astral-sh/ruff?tab=readme-ov-file#getting-started).
+
+### Installation
+
+1. First, clone the repository:
+
+```bash
+git clone git@github.com:leap-laboratories/PIZZA.git
+```
+
+2. Navigate into the cloned directory:
+
+```bash
+cd PIZZA
+```
+
+3. Create a virtual environment and activate it:
+
+```bash
+uv venv
+source .venv/bin/activate
+```
+
+4. To install the dependencies needed to use the library:
+
+```bash
+uv pip install -r requirements.txt
+```
+
+Or to install the dependencies needed to do development on the library:
+
+```bash
+uv pip install -r requirements-dev.txt
+```
+
+Now, you should be able to import and use the library in your Python scripts.
+
+During development, ff you change the requirements listed in `requirements.in` or `requirements-dev.in`, you can use these commands to update the lock files that specify the dependency versions:
+
+```bash
+uv pip compile requirements.in -o requirements.txt
+uv pip compile requirements-dev.in -o requirements-dev.txt
+```
+
+### Initial Configuration
+
+#### Environment Variables
+
+This project uses `python-dotenv` to load environment variables and keep secret keys out of source control. To use this feature, create a `.env` file in the root of the project and add your environment variables there. For example:
+
+```bash
+echo "OPENAI_API_KEY=your_openai_api_key" > .env
+```
+
+The `.env` file is already included in the `.gitignore` file, so it will not be checked into source control.
+
+To load the envioroment variables listed in `.env` in your Python scripts, add the following code at the top of your script:
+
+```python
+from dotenv import load_dotenv
+load_dotenv()
+```
+
+Or to load them into the environment of a Jupyter notebook:
+
+```python
+%load_ext dotenv
+%dotenv
+```
+
+For more information see the [python-dotenv documentation](https://pypi.org/project/python-dotenv/).
+
 ## Quickstart
 
 ### Attribution via OpenAI's API
 
-**!!! This will use API credits !!!**
+> [!WARNING]  
+> Using the `OpenAIAttributor` will use API credits.
 
 The `OpenAIAttributor` is asynchronous and will make multiple requests concurrently, so make sure to check your OpenAI limits and set `max_concurrent_requests` accordingly.
 
@@ -60,7 +144,7 @@ import asyncio
 from attribution.api_attribution import OpenAIAttributor
 from attribution.experiment_logger import ExperimentLogger
 
-# set your "OPENAI_API_KEY" environment variable to your openai API key, or pass it here:
+# OpenAIAttributor can read your "OPENAI_API_KEY" environment variable directly, or pass it here:
 attributor = OpenAIAttributor(
     openai_api_key=YOUR_OPENAI_API_KEY,
     max_concurrent_requests=5,
@@ -132,58 +216,6 @@ attributor.print_attributions(
 ```
 
 More usage examples can be found in the `examples/` folder.
-
-## Requirements
-
-### Packaging
-
-This project uses [uv](https://github.com/astral-sh/uv) for package management. To install `uv`, follow the installation instructions in the [uv docs](https://github.com/astral-sh/uv?tab=readme-ov-file#getting-started).
-
-### Linting
-
-This project uses [ruff](https://github.com/astral-sh/ruff) for linting and formatting. To install `ruff`, follow the installation instructions in the [ruff docs](https://github.com/astral-sh/ruff?tab=readme-ov-file#getting-started).
-
-## Installation
-
-1. First, clone the repository:
-
-```bash
-git clone git@github.com:leap-laboratories/PIZZA.git
-```
-
-2. Navigate into the cloned directory:
-
-```bash
-cd PIZZA
-```
-
-3. Create a virtual environment and activate it:
-
-```bash
-uv venv
-source .venv/bin/activate
-```
-
-4. To install the dependencies needed to use the library:
-
-```bash
-uv pip install -r requirements.txt
-```
-
-Or to install the dependencies needed to do development on the library:
-
-```bash
-uv pip install -r requirements-dev.txt
-```
-
-Now, you should be able to import and use the library in your Python scripts.
-
-5. To update the lock files that specify the dependency versions:
-
-```bash
-uv pip compile requirements.in -o requirements.txt
-uv pip compile requirements-dev.in -o requirements-dev.txt
-```
 
 ## API Design
 
@@ -267,11 +299,11 @@ The flow is similar to that of `compute_attributions`, but using an iterative te
 1. The prompt is split into chunks defined by `init_chunk_size` and `stride` (optional).
 2. The chunks are perturbed, sent to the API, and scores are calculated/logged as described above.
 3. Thresholds are used to determine which chunks should be further processed based on the chunk attribution scores.
-4. Chunks are subdivided, and the process returns to step 2 until none of the processed chunks exceed the thresholds *or* no further subdivision is possible.
+4. Chunks are subdivided, and the process returns to step 2 until none of the processed chunks exceed the thresholds _or_ no further subdivision is possible.
 
 There are currently two thresholds that define whether a chunk should be processed further:
 
-1. Dynamic threshold: here a *cumulative* attribution is defined per token which is incremented every step by the chunk(s) containing a given token. The threshold is then defined as the midrange of these token attributions.
+1. Dynamic threshold: here a _cumulative_ attribution is defined per token which is incremented every step by the chunk(s) containing a given token. The threshold is then defined as the midrange of these token attributions.
 2. Static threshold: for each chunk at a given step in the process, the overall attribution score is compared to a set threshold, defined by the input argument `static_threshold` (`Optional[float]`), depending on the attribution metric used. For example, `static_threshold=0.5` could be a reasonable input for the probability difference attribution method.
 
 Note if more than one `attribution_strategies` are passed, only the first will be used in threshold calculations and comparison.
