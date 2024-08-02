@@ -112,7 +112,7 @@ class ExperimentLogger:
                     strategy,
                     token_id,
                     j,
-                    output_token,
+                    "_".join(output_token.split("_")[:-1]),
                     attr_score,
                     perturbation.perturbed_string,
                     output,
