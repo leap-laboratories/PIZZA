@@ -118,7 +118,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         attribution_strategies: list[str] = ["prob_diff"],
         threshold_attribution_strategy: Optional[str] = None,
         static_threshold: Optional[float] = None,
-        use_absolute_attribution: bool = False,
+        use_absolute_attribution: bool = True,
         unit_definition: Literal["token", "word"] = "token",
         ignore_output_token_location: bool = True,
         logger: Optional[ExperimentLogger] = None,
@@ -133,7 +133,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             perturbation_strategy (PerturbationStrategy): The perturbation strategy to use. Defaults to FixedPerturbationStrategy().
             attribution_strategies (list[str]): The list of attribution strategies to use. Defaults to ["prob_diff"].
             static_threshold (Optional[float]): The static threshold for chunk attribution scores at each depth. Defaults to None.
-            use_absolute_attribution (bool): Flag indicating whether to use absolute attribution scores in dynamic threshold calculation. Defaults to False.
+            use_absolute_attribution (bool): Flag indicating whether to use absolute attribution scores in dynamic threshold calculation. Defaults to True.
             unit_definition (Literal["token", "word"]): The unit definition for splitting the input. Defaults to "token".
             threshold_attribution_strategy (Optional[str]): The attribution strategy to use for threshold calculation. Only relevant when multiple attribution_strategies are passed. Defaults to None (selects the first strategy if multiple provided).
             ignore_output_token_location (bool): Flag indicating whether to ignore the output token location. Defaults to True.
