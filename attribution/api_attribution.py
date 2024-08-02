@@ -35,6 +35,7 @@ load_dotenv()
 DEFAULT_OPENAI_MODEL = "gpt-3.5-turbo"
 REQUEST_DELAY = 0.1
 MIN_MAXIMUM_THRESHOLD = 0.01
+CHUNK_DIVISIOR = 2
 
 
 class OpenAIAttributor(BaseAsyncLLMAttributor):
@@ -59,11 +60,11 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         )
         self.max_concurrent_requests = max_concurrent_requests
 
-    async def compute_attributions(
+    async def iterative_perturbation(
         self,
         original_input: str,
         perturbation_strategy: PerturbationStrategy = FixedPerturbationStrategy(),
-        attribution_strategies: list[str] = ["cosine", "prob_diff"],
+        attribution_strategies: list[str] = ["prob_diff"],
         logger: Optional[ExperimentLogger] = None,
         unit_definition: Literal["token", "word"] = "token",
         ignore_output_token_location: bool = True,
@@ -111,17 +112,17 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
     async def hierarchical_perturbation(
         self,
         original_input: str,
-        init_chunk_size: int,
+        init_chunk_size: Optional[int] = None,
         stride: Optional[int] = None,
         perturbation_strategy: PerturbationStrategy = FixedPerturbationStrategy(),
-        attribution_strategies: list[str] = ["cosine", "prob_diff"],
+        attribution_strategies: list[str] = ["prob_diff"],
         threshold_attribution_strategy: Optional[str] = None,
         static_threshold: Optional[float] = None,
-        use_absolute_attribution: bool = False,
+        use_absolute_attribution: bool = True,
         unit_definition: Literal["token", "word"] = "token",
         ignore_output_token_location: bool = True,
         logger: Optional[ExperimentLogger] = None,
-        verbose: bool = False,
+        verbosity: int = 0,
     ) -> None:
         """
         Hierarchical pertubation method. Uses a sliding window to split the input into chunks and continues to subdivided each chunk until the attribution falls below the dynamic threshold.
@@ -130,14 +131,14 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             init_chunk_size (int): The initial chunk size for splitting the input.
             stride (Optional[int]): The stride for sliding the window. Defaults to None.
             perturbation_strategy (PerturbationStrategy): The perturbation strategy to use. Defaults to FixedPerturbationStrategy().
-            attribution_strategies (list[str]): The list of attribution strategies to use. Defaults to ["cosine", "prob_diff"].
+            attribution_strategies (list[str]): The list of attribution strategies to use. Defaults to ["prob_diff"].
             static_threshold (Optional[float]): The static threshold for chunk attribution scores at each depth. Defaults to None.
-            use_absolute_attribution (bool): Flag indicating whether to use absolute attribution scores in dynamic threshold calculation. Defaults to False.
+            use_absolute_attribution (bool): Flag indicating whether to use absolute attribution scores in dynamic threshold calculation. Defaults to True.
             unit_definition (Literal["token", "word"]): The unit definition for splitting the input. Defaults to "token".
             threshold_attribution_strategy (Optional[str]): The attribution strategy to use for threshold calculation. Only relevant when multiple attribution_strategies are passed. Defaults to None (selects the first strategy if multiple provided).
             ignore_output_token_location (bool): Flag indicating whether to ignore the output token location. Defaults to True.
             logger (Optional[ExperimentLogger]): The experiment logger. Defaults to None.
-            verbose (bool): Flag indicating whether to print verbose output. Defaults to False.
+            verbosity (int): Flag indicates how much information to print. Defaults to 0. Max = 2. 
         """
         threshold_attribution_strategy = threshold_attribution_strategy or attribution_strategies[0]
         if threshold_attribution_strategy not in attribution_strategies:
@@ -148,6 +149,11 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         llm_input = LLMInput(
             input_string=original_input, tokenizer=self.tokenizer, unit_definition=unit_definition
         )
+
+        if init_chunk_size is None:
+            init_chunk_size = max(2, len(llm_input.unit_tokens) // CHUNK_DIVISIOR)
+        if stride is None:
+            stride = max(1, init_chunk_size//2)
 
         original_output = await self.get_chat_completion(llm_input.input_string)
         if logger:
@@ -169,7 +175,8 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
         # Main loop for hierarchical perturbation, run until masks cannot be further subdivided
         while masks:
-            print(f"Stage {stage}: making {len(masks)} perturbations")
+            if verbosity > 0:
+                print(f"Stage {stage}: making {len(masks)} perturbations")
             # Define perturbations for each mask
             perturbations: list[PerturbedLLMInput] = []
             for mask in masks:
@@ -181,9 +188,9 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
                     )
                 )
 
-            if verbose:
+            if verbosity > 1:
                 print("Masked out tokens/words:")
-                print(*[[perturbation.masked_string] for perturbation in perturbations], sep="\n")
+                print(*[[perturbation.masked_string] for perturbation in perturbations], sep=" ")
 
             # Wait for the perturbed results
             outputs = await self.get_multiple_completions(
@@ -211,8 +218,8 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
 
                     # Define threshold based on the chosen strategy
                     if strategy == threshold_attribution_strategy:
-                        chunk_scores.append(attribution_scores["sentence_attribution"])
-                        unit_attribution[i, mask] = norm_attribution_scores["sentence_attribution"]
+                        chunk_scores.append(attribution_scores["total_attribution"])
+                        unit_attribution[i, mask] = norm_attribution_scores["total_attribution"]
 
             # Filling units that were not perturbed with zeros to avoid full nan columns
             unperturbed_units = np.isnan(unit_attribution).all(axis=0)
@@ -368,11 +375,11 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             raise ValueError(f"Unknown attribution strategy: {attribution_strategy}")
 
         scores = {
-            "sentence_attribution": np.mean(list(token_attributions.values())),
+            "total_attribution": np.mean(list(token_attributions.values())),
             "token_attribution": token_attributions,
         }
         norm_scores = {
-            "sentence_attribution": np.mean(list(token_attributions.values())) / chunksize,
+            "total_attribution": np.mean(list(token_attributions.values())) / chunksize,
             "token_attribution": {k: v / chunksize for k, v in token_attributions.items()},
         }
 

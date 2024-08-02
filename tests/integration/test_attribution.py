@@ -33,7 +33,7 @@ def attributor(model, embeddings, tokenizer):
 
 def test_attribution(model, embeddings, tokenizer):
     attributor = LocalLLMAttributor(model=model, embeddings=embeddings, tokenizer=tokenizer)
-    attr_scores, token_ids = attributor.compute_attributions(
+    attr_scores, token_ids = attributor.iterative_perturbation(
         input_string="the five continents are asia, europe, afri",
         generation_length=7,
     )

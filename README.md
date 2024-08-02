@@ -1,4 +1,5 @@
 # PIZZA
+
 PIZZA: an LLM Attribution Library © 2024 by [Leap Laboratories](https://www.leap-labs.com/) is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1)
 
 `P`rompt `I`nput `Z`onal `Z`? `A`ttribution analyzer
@@ -8,25 +9,32 @@ PIZZA: an LLM Attribution Library © 2024 by [Leap Laboratories](https://www.lea
 It can be used with OpenAI LLMs accessible through an API:
 
 ![API-accessible LLM Attribution Table](docs/assets/api-PIZZA.png)
+![API-accessible LLM Attribution Table](docs/assets/api-PIZZA-2.png)
 
 and local LLMs:
 
 ![Local LLM Attribution Table](docs/assets/local-PIZZA.png)
 
-## Index
-
 - [PIZZA](#pizza)
-  - [Index](#index)
+  - [Setup](#setup)
+    - [Requirements](#requirements)
+      - [Packaging](#packaging)
+      - [Linting](#linting)
+    - [Installation](#installation)
+    - [Initial Configuration](#initial-configuration)
+      - [Environment Variables](#environment-variables)
   - [Quickstart](#quickstart)
-  - [Requirements](#requirements)
-    - [Packaging](#packaging)
-    - [Linting](#linting)
-  - [Installation](#installation)
+    - [Attribution via OpenAI's API](#attribution-via-openais-api)
+      - [Iterative perturbation](#iterative-perturbation)
+      - [Hierarchical perturbation](#hierarchical-perturbation)
+    - [Local attribution](#local-attribution)
+      - [Using gradient-based attribution for gemma-2b](#using-gradient-based-attribution-for-gemma-2b)
   - [API Design](#api-design)
     - [BaseLLMAttributor and BaseAsyncLLMAttributor](#basellmattributor-and-baseasyncllmattributor)
     - [LocalLLMAttributor](#localllmattributor)
       - [Cleaning Up](#cleaning-up)
     - [OpenAIAttributor](#openaiattributor)
+      - [Attribution methods](#attribution-methods)
     - [PerturbationStrategy and AttributionStrategy](#perturbationstrategy-and-attributionstrategy)
     - [ExperimentLogger](#experimentlogger)
   - [Limitations](#limitations)
@@ -37,120 +45,19 @@ and local LLMs:
   - [Testing](#testing)
   - [Research](#research)
 
-## Quickstart
+## Setup
 
-### Attribution via OpenAI's API
+### Requirements
 
-**!!! This will use API credits !!!**
-
-The `OpenAIAttributor` is asynchronous and will make multiple requests concurrently, so make sure to check your OpenAI limits and set `max_concurrent_requests` accordingly.
-
-#### Perturbing each token individually
-
-```python
-import asyncio
-
-from attribution.api_attribution import OpenAIAttributor
-from attribution.experiment_logger import ExperimentLogger
-from attribution.token_perturbation import NthNearestPerturbationStrategy
-
-# set your "OPENAI_API_KEY" environment variable to your openai API key, or pass it here:
-attributor = OpenAIAttributor(
-    openai_api_key=YOUR_OPENAI_API_KEY,
-    max_concurrent_requests=5,
-)
-
-logger = ExperimentLogger()
-
-input_text = "The clock shows 9:47 PM. How many minutes 'til 10?"
-attribution_task = attributor.compute_attributions(
-    input_text,
-    perturbation_strategy=NthNearestPerturbationStrategy(n=-1),
-    attribution_strategies=["cosine", "prob_diff"],
-    logger=logger,
-    unit_definition="word",
-)
-
-asyncio.run(attribution_task)
-
-logger.print_sentence_attribution()
-logger.print_attribution_matrix(exp_id=1)
-
-```
-
-#### Using hierarchical perturbation
-
-```python
-import asyncio
-
-from attribution.api_attribution import OpenAIAttributor
-from attribution.experiment_logger import ExperimentLogger
-from attribution.token_perturbation import FixedPerturbationStrategy
-
-attributor = OpenAIAttributor(
-    openai_api_key=YOUR_OPENAI_API_KEY,
-    max_concurrent_requests=5,
-)
-
-logger = ExperimentLogger()
-
-input_text = "The clock shows 9:47 PM. How many minutes 'til 10?"
-attribution_task = attributor.hierarchical_perturbation(
-    input_text,
-    init_chunk_size=4,
-    perturbation_strategy=FixedPerturbationStrategy(),
-    attribution_strategies=["cosine", "prob_diff"],
-    static_threshold=0.5,
-    logger=logger,
-    unit_definition="word",
-)
-
-asyncio.run(attribution_task)
-
-logger.print_sentence_attribution()
-logger.print_attribution_matrix(exp_id=1)
-```
-
-### Local attribution
-
-#### Using gradient-based attribution for gemma-2b
-
-```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from attribution.attribution import Attributor
-
-model_id = "google/gemma-2b-it"
-model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto").cuda()
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-embeddings = model.get_input_embeddings().weight.detach()
-
-attributor = Attributor(model=model, embeddings=embeddings, tokenizer=tokenizer)
-attr_scores, token_ids = attributor.get_attributions(
-    input_string="the five continents are asia, europe, afri",
-    generation_length=7,
-)
-
-attributor.print_attributions(
-    word_list=tokenizer.convert_ids_to_tokens(token_ids),
-    attr_scores=attr_scores,
-    token_ids=token_ids,
-    generation_length=7,
-)
-```
-
-More usage examples can be found in the `examples/` folder.
-
-## Requirements
-
-### Packaging
+#### Packaging
 
 This project uses [uv](https://github.com/astral-sh/uv) for package management. To install `uv`, follow the installation instructions in the [uv docs](https://github.com/astral-sh/uv?tab=readme-ov-file#getting-started).
 
-### Linting
+#### Linting
 
 This project uses [ruff](https://github.com/astral-sh/ruff) for linting and formatting. To install `ruff`, follow the installation instructions in the [ruff docs](https://github.com/astral-sh/ruff?tab=readme-ov-file#getting-started).
 
-## Installation
+### Installation
 
 1. First, clone the repository:
 
@@ -185,12 +92,130 @@ uv pip install -r requirements-dev.txt
 
 Now, you should be able to import and use the library in your Python scripts.
 
-5. To update the lock files that specify the dependency versions:
+During development, ff you change the requirements listed in `requirements.in` or `requirements-dev.in`, you can use these commands to update the lock files that specify the dependency versions:
 
 ```bash
 uv pip compile requirements.in -o requirements.txt
 uv pip compile requirements-dev.in -o requirements-dev.txt
 ```
+
+### Initial Configuration
+
+#### Environment Variables
+
+This project uses `python-dotenv` to load environment variables and keep secret keys out of source control. To use this feature, create a `.env` file in the root of the project and add your environment variables there. For example:
+
+```bash
+echo "OPENAI_API_KEY=your_openai_api_key" > .env
+```
+
+The `.env` file is already included in the `.gitignore` file, so it will not be checked into source control.
+
+To load the envioroment variables listed in `.env` in your Python scripts, add the following code at the top of your script:
+
+```python
+from dotenv import load_dotenv
+load_dotenv()
+```
+
+Or to load them into the environment of a Jupyter notebook:
+
+```python
+%load_ext dotenv
+%dotenv
+```
+
+For more information see the [python-dotenv documentation](https://pypi.org/project/python-dotenv/).
+
+## Quickstart
+
+### Attribution via OpenAI's API
+
+> [!WARNING]  
+> Using the `OpenAIAttributor` will use API credits.
+
+The `OpenAIAttributor` is asynchronous and will make multiple requests concurrently, so make sure to check your OpenAI limits and set `max_concurrent_requests` accordingly.
+
+#### Iterative perturbation
+
+```python
+import asyncio
+
+from attribution.api_attribution import OpenAIAttributor
+from attribution.experiment_logger import ExperimentLogger
+
+# OpenAIAttributor can read your "OPENAI_API_KEY" environment variable directly, or pass it here:
+attributor = OpenAIAttributor(
+    openai_api_key=YOUR_OPENAI_API_KEY,
+    max_concurrent_requests=5,
+)
+
+logger = ExperimentLogger()
+
+input_text = "The clock shows 9:47 PM. How many minutes 'til 10?"
+attribution_task = attributor.iterative_perturbation(
+    input_text,
+    logger=logger,
+)
+
+asyncio.run(attribution_task)
+
+logger.print_attribution_matrix()
+```
+
+#### Hierarchical perturbation
+
+```python
+import asyncio
+
+from attribution.api_attribution import OpenAIAttributor
+from attribution.experiment_logger import ExperimentLogger
+
+attributor = OpenAIAttributor(
+    openai_api_key=YOUR_OPENAI_API_KEY,
+    max_concurrent_requests=5,
+)
+
+logger = ExperimentLogger()
+
+input_text = "The clock shows 9:47 PM. How many minutes 'til 10?"
+attribution_task = attributor.hierarchical_perturbation(
+    input_text,
+    logger=logger
+)
+
+asyncio.run(attribution_task)
+logger.print_attribution_matrix()
+```
+
+### Local attribution
+
+#### Using gradient-based attribution for gemma-2b
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from attribution.attribution import Attributor
+
+model_id = "google/gemma-2b-it"
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto").cuda()
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+embeddings = model.get_input_embeddings().weight.detach()
+
+attributor = Attributor(model=model, embeddings=embeddings, tokenizer=tokenizer)
+attr_scores, token_ids = attributor.get_attributions(
+    input_string="the five continents are asia, europe, afri",
+    generation_length=7,
+)
+
+attributor.print_attributions(
+    word_list=tokenizer.convert_ids_to_tokens(token_ids),
+    attr_scores=attr_scores,
+    token_ids=token_ids,
+    generation_length=7,
+)
+```
+
+More usage examples can be found in the `examples/` folder.
 
 ## API Design
 
@@ -198,14 +223,14 @@ The attributors are designed to compute the contribution made by each token in a
 
 ### BaseLLMAttributor and BaseAsyncLLMAttributor
 
-`BaseLLMAttributor` and `BaseAsyncLLMAttributor` are abstract base classes that define the interfaces for all LLM attributors. They declare the `compute_attributions` method, which must be implemented by any concrete attributor class. This method takes an input text and computes the attribution scores for each token.
+`BaseLLMAttributor` and `BaseAsyncLLMAttributor` are abstract base classes that define the interfaces for all LLM attributors. They declare the `iterative_perturbation` method, which must be implemented by any concrete attributor class. This method takes an input text and computes the attribution scores for each token.
 
-Note that `BaseAsyncLLMAttributor` uses `asyncio` to makes requests and therefore calls to `compute_attributions` in concrete classes (such as `OpenAIAttributor`) must be awaited using the `await` keyword.
+Note that `BaseAsyncLLMAttributor` uses `asyncio` to makes requests and therefore calls to `iterative_perturbation` in concrete classes (such as `OpenAIAttributor`) must be awaited using the `await` keyword.
 
 ```python
 class BaseLLMAttributor(ABC):
     @abstractmethod
-    def compute_attributions(
+    def iterative_perturbation(
         self, input_text: str, *args, **kwargs
     ) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
         pass
@@ -213,7 +238,7 @@ class BaseLLMAttributor(ABC):
 
 class BaseAsyncLLMAttributor(ABC):
     @abstractmethod
-    async def compute_attributions(
+    async def iterative_perturbation(
         self, input_text: str, *args, **kwargs
     ) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
         pass
@@ -234,13 +259,13 @@ class LocalLLMAttributor:
         log_level: int = logging.WARNING,
     ):
         ...
-    def compute_attributions(
+    def iterative_perturbation(
         self, input_string: str, generation_length: int = 5
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         ...
 ```
 
-The `compute_attributions` method generates tokens from the input string and computes the gradients of the output with respect to the input embeddings. These gradients are used to compute the attribution scores.
+The `iterative_perturbation` method generates tokens from the input string and computes the gradients of the output with respect to the input embeddings. These gradients are used to compute the attribution scores.
 
 `LocalLLMAttributor` uses gradient-based attribution to quantify the influence of input tokens on the output of a model. For each output token, it computes the gradients with respect to the input embeddings. The L1 norm of these gradients is then used as the attribution score, representing the total influence of each input token on the output
 
@@ -258,9 +283,9 @@ local_attributor.cleanup()
 
 `OpenAIAttributor` uses the OpenAI API to compute attributions. Given that gradients are not accessible, the attributor perturbs the input with a given `PerturbationStrategy` and measures the magnitude of change of the generated output with an `attribution_strategy`.
 
-There are two methods for computing attributions in the `OpenAIAttributor`: `compute_attributions` and `hierarchical_perturbation`.
+There are two methods for computing attributions in the `OpenAIAttributor`: `iterative_perturbation` and `hierarchical_perturbation`.
 
-The `compute_attributions` method:
+The `iterative_perturbation` method:
 
 1. Sends a chat completion request to the OpenAI API.
 2. Uses a `PerturbationStrategy` to modify the input prompt, and sends the perturbed input to OpenAI's API to generate a perturbed output. Each token of the input prompt is perturbed separately, to obtain an attribution score for each input token.
@@ -269,16 +294,16 @@ The `compute_attributions` method:
 
 The `hierarchical_perturbation` method is designed to reduce the number of API calls by perturbation larger chunks of the input prompt initially, and narrowing its search only on the chunks which have a large impact on the output (high attribution score).
 
-The flow is similar to that of `compute_attributions`, but using an iterative technique that works as follows:
+The flow is similar to that of `iterative_perturbation`, but using an iterative technique that works as follows:
 
 1. The prompt is split into chunks defined by `init_chunk_size` and `stride` (optional).
 2. The chunks are perturbed, sent to the API, and scores are calculated/logged as described above.
 3. Thresholds are used to determine which chunks should be further processed based on the chunk attribution scores.
-4. Chunks are subdivided, and the process returns to step 2 until none of the processed chunks exceed the thresholds *or* no further subdivision is possible.
+4. Chunks are subdivided, and the process returns to step 2 until none of the processed chunks exceed the thresholds _or_ no further subdivision is possible.
 
 There are currently two thresholds that define whether a chunk should be processed further:
 
-1. Dynamic threshold: here a *cumulative* attribution is defined per token which is incremented every step by the chunk(s) containing a given token. The threshold is then defined as the midrange of these token attributions.
+1. Dynamic threshold: here a _cumulative_ attribution is defined per token which is incremented every step by the chunk(s) containing a given token. The threshold is then defined as the midrange of these token attributions.
 2. Static threshold: for each chunk at a given step in the process, the overall attribution score is compared to a set threshold, defined by the input argument `static_threshold` (`Optional[float]`), depending on the attribution metric used. For example, `static_threshold=0.5` could be a reasonable input for the probability difference attribution method.
 
 Note if more than one `attribution_strategies` are passed, only the first will be used in threshold calculations and comparison.
@@ -297,7 +322,7 @@ Note if more than one `attribution_strategies` are passed, only the first will b
 
 The `attribution_strategy` parameter is a string that specifies the method to use for computing attributions. The available strategies are "cosine" and "prob_diff".
 
-- **Cosine Similarity Attribution**: Measures the cosine similarity between the embeddings of the original and perturbed outputs. The embeddings are obtained from a pre-trained model (e.g. GPT2). The cosine similarity is calculated for each pair of tokens in the same position on the original and perturbed outputs. For example, it compares the token in position 0 in the original response to the token in position 0 in the perturbed response. Additionally, the cosine similarity of the entire sentence embeddings is computed. The difference in sentence similarity and token similarities are returned.
+- **Cosine Similarity Attribution**: Measures the cosine similarity between the embeddings of the original and perturbed outputs. The embeddings are obtained from a pre-trained model (e.g. GPT2). The cosine similarity is calculated for each pair of tokens in the same position on the original and perturbed outputs. For example, it compares the token in position 0 in the original response to the token in position 0 in the perturbed response. Additionally, the cosine similarity of all of the embeddings together is computed. The difference in total similarity and token similarities are returned.
 
 - **Probability Difference Attribution**: Calculates the absolute difference in probabilities for each token in the original and perturbed outputs. The probabilities are obtained from the `top_logprobs` field of the tokens, which contains the most likely tokens for each token position. The mean of these differences is returned, as well as the probability difference for each token position.
 

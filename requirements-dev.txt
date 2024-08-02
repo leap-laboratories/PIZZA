@@ -8,6 +8,8 @@ anyio==4.3.0
     # via
     #   httpx
     #   openai
+appnope==0.1.4
+    # via ipykernel
 asttokens==2.4.1
     # via stack-data
 certifi==2024.2.2
@@ -45,7 +47,6 @@ filelock==3.14.0
     #   huggingface-hub
     #   torch
     #   transformers
-    #   triton
     #   virtualenv
 fonttools==4.51.0
     # via matplotlib
@@ -253,8 +254,6 @@ traitlets==5.14.3
     #   matplotlib-inline
 transformers==4.43.1
     # via -r requirements.in
-triton==2.2.0
-    # via torch
 typing-extensions==4.11.0
     # via
     #   anyio

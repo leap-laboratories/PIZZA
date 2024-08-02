@@ -3,11 +3,17 @@ import pickle
 import time
 from typing import Any, Literal, Optional
 
+import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
 import pandas as pd
 from IPython.core.getipython import get_ipython
+from IPython.display import HTML
 
 from .token_perturbation import PerturbationStrategy, PerturbedLLMInput, combine_unit
 
+DIV_STYLE_STR = '<div style="font-family: monospace; line-height: 1.5;">'
+SPAN_STYLE_COLOR_STR = '<span style="text-decoration: underline; text-decoration-color: #color#; text-decoration-thickness: 4px; text-underline-offset: 3px;">'
+SPAN_STYLE_STR = '<span style="text-decoration: underline; text-decoration-thickness: 4px; text-underline-offset: 3px;">'
 
 class ExperimentLogger:
     def __init__(self, experiment_id=0):
@@ -96,7 +102,7 @@ class ExperimentLogger:
                 strategy,
                 token_id,
                 combine_unit(unit_token),
-                float(attribution_scores["sentence_attribution"]),
+                float(attribution_scores["total_attribution"]),
             )
 
             for j, (output_token, attr_score) in enumerate(
@@ -106,7 +112,7 @@ class ExperimentLogger:
                     strategy,
                     token_id,
                     j,
-                    output_token,
+                    " ".join(output_token.split(" ")[:-1]),
                     attr_score,
                     perturbation.perturbed_string,
                     output,
@@ -173,14 +179,127 @@ class ExperimentLogger:
         }
 
     def clean_tokens(self, tokens):
-        return [token.replace("Ġ", "") for token in tokens]
+        return [token.replace("Ġ", " ") for token in tokens]
 
-    def print_sentence_attribution(self, score_agg: Literal["mean", "sum", "last"] = "mean"):
-        sentences = []
+    def score_to_color(self, score, vmin=-1, vmax=1):
+        #Setting vmin and vmax to -1 and 1 centers the scores around 0.
+        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+        cmap = plt.cm.seismic
+        rgba_color = cmap(norm(score))
+        color_hex = mcolors.to_hex(rgba_color)
+        return color_hex
 
-        for (exp_id, attr_strat), exp_data in self.df_input_token_attribution.groupby(
-            ["exp_id", "attribution_strategy"]
-        ):
+    def print_text_total_attribution(
+        self, exp_id: Optional[int] = None, score_agg: Literal["mean", "sum", "last"] = "mean"
+    ):
+        
+        if exp_id is not None and exp_id < 0:
+            exp_id = self.df_experiments["exp_id"].max() + 1 + exp_id
+
+        token_attrs_df = (
+            self.df_input_token_attribution.groupby(["exp_id", "attribution_strategy"])
+            if exp_id is None
+            else self.df_input_token_attribution[
+                self.df_input_token_attribution["exp_id"] == exp_id
+            ].groupby(["exp_id", "attribution_strategy"])
+        )
+
+        for (exp_id, _), exp_data in token_attrs_df:
+            if exp_data["input_token_pos"].duplicated().any():
+                exp_data = self._aggregate_attr_score_df(exp_data, score_agg)
+
+            tokens = self.clean_tokens(exp_data["input_token"].tolist())
+            attr_scores = exp_data["attr_score"].tolist()
+
+            token_dict = {f"token_{i+1}": t for i, t in enumerate(tokens)}
+            score_dict = {f"token_{i+1}": score for i, score in enumerate(attr_scores)}
+
+            output = self.df_experiments.loc[
+                self.df_experiments["exp_id"] == exp_id, "original_output"
+            ].values[0]
+
+            df = pd.DataFrame([token_dict, score_dict], index=["token", "attr_score"])
+
+            # Generating HTML
+            html_str = DIV_STYLE_STR
+            for col in df.columns:
+                token = df[col]["token"]
+                score = df[col]["attr_score"]
+                color = self.score_to_color(score)
+                html_str += SPAN_STYLE_COLOR_STR.replace('#color#', color) + token + '</span>'
+
+            
+            html_str += ' -> ' + output
+            html_str += "</div>"
+
+            # Display
+
+            if get_ipython() and "IPKernelApp" in get_ipython().config:
+                from IPython.display import display
+
+                display(HTML(html_str))
+            else:
+                self.pretty_print(df)
+
+    def print_text_attribution_matrix(self, exp_id: int = -1):
+        if exp_id is not None and exp_id < 0:
+            exp_id = self.df_experiments["exp_id"].max() + 1 + exp_id
+
+        matrices = self.get_attribution_matrices(exp_id)
+
+        for matrix in matrices:
+            input_tokens = [" ".join(x.split(" ")[:-1]) for x in matrix.index]
+
+            token_dict = {f"token_{i+1}": t for i, t in enumerate(input_tokens)}
+
+            for oi, output_token in enumerate(matrix.columns):
+                prev_output_str = "".join([" ".join(ot.split(" ")[:-1]) for ot in matrix.columns[:oi]])
+                following_output_str = "".join(
+                    [" ".join(ot.split(" ")[:-1]) for ot in matrix.columns[oi + 1 :]]
+                )
+                attr_scores = matrix[output_token].tolist()
+
+                score_dict = {f"token_{i+1}": score for i, score in enumerate(attr_scores)}
+
+                df = pd.DataFrame([token_dict, score_dict], index=["token", "attr_score"])
+
+                # Generating HTML
+                html_str = DIV_STYLE_STR
+                for col in df.columns:
+                    token = df[col]["token"]
+                    score = df[col]["attr_score"]
+                    color = self.score_to_color(score)
+                    html_str += SPAN_STYLE_COLOR_STR.replace('#color#', color) + token + '</span>'
+
+                clean_output_token = " ".join(output_token.split(" ")[:-1])
+                html_str += ' -> ' + prev_output_str + SPAN_STYLE_STR + clean_output_token + '</span>' + following_output_str
+                html_str += "</div>"
+
+                # Display
+
+                if get_ipython() and "IPKernelApp" in get_ipython().config:
+                    from IPython.display import display
+
+                    display(HTML(html_str))
+                else:
+                    self.pretty_print(df)
+
+    def print_total_attribution(
+        self, exp_id: Optional[int] = None, score_agg: Literal["mean", "last"] = "mean"
+    ):
+        totals = []
+        if exp_id is not None and exp_id < 0:
+            exp_id = self.df_experiments["exp_id"].max() + 1 + exp_id
+
+        token_attrs_df = (
+            self.df_input_token_attribution.groupby(["exp_id", "attribution_strategy"])
+            if exp_id is None
+            else self.df_input_token_attribution[
+                self.df_input_token_attribution["exp_id"] == exp_id
+            ].groupby(["exp_id", "attribution_strategy"])
+        )
+
+        for (exp_id, attr_strategy), exp_data in token_attrs_df:
             if exp_data["input_token_pos"].duplicated().any():
                 exp_data = self._aggregate_attr_score_df(exp_data, score_agg)
 
@@ -196,39 +315,67 @@ class ExperimentLogger:
                 self.df_experiments["exp_id"] == exp_id, "unit_definition"
             ].values[0]
 
-            sentence_data = {
+            total_data = {
                 "exp_id": exp_id,
-                "attribution_strategy": attr_strat,
+                "attribution_strategy": attr_strategy,
                 "perturbation_strategy": perturbation_strategy,
                 "unit_definition": unit_definition,
             }
-            sentence_data.update(
+            total_data.update(
                 {f"token_{i+1}": token_attr for i, token_attr in enumerate(token_attrs)}
             )
+            totals.append(total_data)
 
-            sentences.append(sentence_data)
-
-        df_sentences = pd.DataFrame(sentences)
-        self.pretty_print(df_sentences)
+        df_totals = pd.DataFrame(totals)
+        self.pretty_print(df_totals)
+        return df_totals
 
     def print_attribution_matrix(
         self,
-        exp_id: int,
+        exp_id: int = -1,
+        attribution_strategy: Optional[str] = None,
+        show_debug_cols: bool = False,
+        score_agg: Literal["mean", "last"] = "mean",
+    ):
+        if exp_id is not None and exp_id < 0:
+            exp_id = self.df_experiments["exp_id"].max() + 1 + exp_id
+
+        matrices = self.get_attribution_matrices(
+            exp_id, attribution_strategy, show_debug_cols, score_agg
+        )
+
+        for matrix in matrices:
+            if get_ipython() and "IPKernelApp" in get_ipython().config:
+                from IPython.display import display
+
+                display(
+                    matrix.style.background_gradient(cmap="seismic", vmin=-1, vmax=1).set_properties(
+                        **{"white-space": "pre-wrap"}
+                    )
+                )
+            else:
+                self.pretty_print(matrix)
+    
+    def get_attribution_matrices(
+        self,
+        exp_id: int = -1,
         attribution_strategy: Optional[str] = None,
         show_debug_cols: bool = False,
         score_agg: Literal["mean", "sum", "last"] = "mean",
     ):
+        if exp_id is not None and exp_id < 0:
+            exp_id = self.df_experiments["exp_id"].max() + 1 + exp_id
+
         if attribution_strategy is None:
-            unique_strategies = self.df_token_attribution_matrix["attribution_strategy"].unique()
-            for strategy in unique_strategies:
-                self.print_attribution_matrix(
-                    exp_id,
-                    attribution_strategy=strategy,
-                    show_debug_cols=show_debug_cols,
-                    score_agg=score_agg,
-                )
+            strategies = self.df_token_attribution_matrix[
+                (self.df_token_attribution_matrix["exp_id"] == exp_id)
+            ]["attribution_strategy"].unique()
         else:
-            # Filter the experiment and token data for the specific experiment and attribution strategy
+            strategies = [attribution_strategy]
+
+        matrices = []
+        for attribution_strategy in strategies:
+            # Filter the data for the specific experiment and attribution strategy
             exp_data = self.df_token_attribution_matrix[
                 (self.df_token_attribution_matrix["exp_id"] == exp_id)
                 & (self.df_token_attribution_matrix["attribution_strategy"] == attribution_strategy)
@@ -240,15 +387,13 @@ class ExperimentLogger:
             ]
 
             is_hierarchical = exp_data["depth"].any()
+
             if is_hierarchical:
                 exp_data = self._aggregate_attr_score_df(exp_data, score_agg)
                 token_data = self._aggregate_attr_score_df(token_data, score_agg)
 
-            perturbation_strategy = self.df_experiments.loc[
-                self.df_experiments["exp_id"] == exp_id, "perturbation_strategy"
-            ].values[0]
-
             # Create the pivot table for the matrix
+            
             matrix = exp_data.pivot(
                 index="input_token_pos", columns="output_token_pos", values="attr_score"
             )
@@ -271,11 +416,6 @@ class ExperimentLogger:
             matrix.index = input_tokens_with_pos
             matrix.columns = output_tokens_with_pos
 
-            print(
-                f"Attribution matrix for experiment {exp_id} \nAttribution Strategy: {attribution_strategy} \nPerturbation strategy: {perturbation_strategy}:"
-            )
-            print("Input Tokens (Rows) vs. Output Tokens (Columns)")
-
             if show_debug_cols:
                 additional_columns = exp_data[
                     ["input_token_pos", "perturbed_input", "perturbed_output"]
@@ -287,12 +427,9 @@ class ExperimentLogger:
                 )
                 additional_columns = additional_columns[["perturbed_input", "perturbed_output"]]
                 matrix = matrix.join(additional_columns)
-            if get_ipython() and "IPKernelApp" in get_ipython().config:
-                from IPython.display import display
 
-                display(matrix.style.background_gradient(cmap="coolwarm", vmin=-1, vmax=1))
-            else:
-                print(matrix)
+            matrices.append(matrix)
+        return matrices
 
     def pretty_print(self, df: pd.DataFrame):
         # Check if code is running in Jupyter notebook

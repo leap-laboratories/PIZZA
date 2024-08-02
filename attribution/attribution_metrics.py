@@ -37,9 +37,8 @@ def token_prob_attribution(
         )
         perturbed_logprob = perturbed_token_logprobs.get(initial_token[0], NEAR_ZERO_PROB)
         prob_difference = math.exp(initial_token[1]) - math.exp(perturbed_logprob)
-        prob_difference_per_token[initial_token[0]] = prob_difference
+        prob_difference_per_token[f"{initial_token[0]} ({i})"] = prob_difference
 
-    # Note: Different length outputs shift the mean upwards. This may or may not be desired behaviour.
     return prob_difference_per_token
 
 
@@ -69,7 +68,7 @@ def cosine_similarity_attribution(
 
     cosine_distance = 1 - cosine_similarity(original_output_emb, perturbed_output_emb)
     token_distance = cosine_distance.min(axis=-1)
-    return {token: distance for token, distance in zip(initial_tokens, token_distance)}
+    return {token + f" {i}": distance for i, (token, distance) in enumerate(zip(initial_tokens, token_distance))}
 
 
 def _is_token_in_top_20(
