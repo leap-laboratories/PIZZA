@@ -328,6 +328,7 @@ class ExperimentLogger:
 
         df_totals = pd.DataFrame(totals)
         self.pretty_print(df_totals)
+        return df_totals
 
     def print_attribution_matrix(
         self,
@@ -354,7 +355,7 @@ class ExperimentLogger:
                 )
             else:
                 self.pretty_print(matrix)
-
+    
     def get_attribution_matrices(
         self,
         exp_id: int = -1,
