@@ -60,7 +60,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         )
         self.max_concurrent_requests = max_concurrent_requests
 
-    async def compute_attributions(
+    async def iterative_perturbation(
         self,
         original_input: str,
         perturbation_strategy: PerturbationStrategy = FixedPerturbationStrategy(),

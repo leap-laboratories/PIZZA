@@ -13,7 +13,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 embeddings = model.get_input_embeddings().weight.detach()
 
 attributor = LocalLLMAttributor(model=model, embeddings=embeddings, tokenizer=tokenizer)
-attr_scores, token_ids = attributor.compute_attributions(
+attr_scores, token_ids = attributor.iterative_perturbation(
     input_string="the five continents are asia, europe, afri",
     generation_length=7,
 )

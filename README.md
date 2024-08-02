@@ -153,7 +153,7 @@ attributor = OpenAIAttributor(
 logger = ExperimentLogger()
 
 input_text = "The clock shows 9:47 PM. How many minutes 'til 10?"
-attribution_task = attributor.compute_attributions(
+attribution_task = attributor.iterative_perturbation(
     input_text,
     logger=logger,
 )
@@ -223,14 +223,14 @@ The attributors are designed to compute the contribution made by each token in a
 
 ### BaseLLMAttributor and BaseAsyncLLMAttributor
 
-`BaseLLMAttributor` and `BaseAsyncLLMAttributor` are abstract base classes that define the interfaces for all LLM attributors. They declare the `compute_attributions` method, which must be implemented by any concrete attributor class. This method takes an input text and computes the attribution scores for each token.
+`BaseLLMAttributor` and `BaseAsyncLLMAttributor` are abstract base classes that define the interfaces for all LLM attributors. They declare the `iterative_perturbation` method, which must be implemented by any concrete attributor class. This method takes an input text and computes the attribution scores for each token.
 
-Note that `BaseAsyncLLMAttributor` uses `asyncio` to makes requests and therefore calls to `compute_attributions` in concrete classes (such as `OpenAIAttributor`) must be awaited using the `await` keyword.
+Note that `BaseAsyncLLMAttributor` uses `asyncio` to makes requests and therefore calls to `iterative_perturbation` in concrete classes (such as `OpenAIAttributor`) must be awaited using the `await` keyword.
 
 ```python
 class BaseLLMAttributor(ABC):
     @abstractmethod
-    def compute_attributions(
+    def iterative_perturbation(
         self, input_text: str, *args, **kwargs
     ) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
         pass
@@ -238,7 +238,7 @@ class BaseLLMAttributor(ABC):
 
 class BaseAsyncLLMAttributor(ABC):
     @abstractmethod
-    async def compute_attributions(
+    async def iterative_perturbation(
         self, input_text: str, *args, **kwargs
     ) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
         pass
@@ -259,13 +259,13 @@ class LocalLLMAttributor:
         log_level: int = logging.WARNING,
     ):
         ...
-    def compute_attributions(
+    def iterative_perturbation(
         self, input_string: str, generation_length: int = 5
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         ...
 ```
 
-The `compute_attributions` method generates tokens from the input string and computes the gradients of the output with respect to the input embeddings. These gradients are used to compute the attribution scores.
+The `iterative_perturbation` method generates tokens from the input string and computes the gradients of the output with respect to the input embeddings. These gradients are used to compute the attribution scores.
 
 `LocalLLMAttributor` uses gradient-based attribution to quantify the influence of input tokens on the output of a model. For each output token, it computes the gradients with respect to the input embeddings. The L1 norm of these gradients is then used as the attribution score, representing the total influence of each input token on the output
 
@@ -283,9 +283,9 @@ local_attributor.cleanup()
 
 `OpenAIAttributor` uses the OpenAI API to compute attributions. Given that gradients are not accessible, the attributor perturbs the input with a given `PerturbationStrategy` and measures the magnitude of change of the generated output with an `attribution_strategy`.
 
-There are two methods for computing attributions in the `OpenAIAttributor`: `compute_attributions` and `hierarchical_perturbation`.
+There are two methods for computing attributions in the `OpenAIAttributor`: `iterative_perturbation` and `hierarchical_perturbation`.
 
-The `compute_attributions` method:
+The `iterative_perturbation` method:
 
 1. Sends a chat completion request to the OpenAI API.
 2. Uses a `PerturbationStrategy` to modify the input prompt, and sends the perturbed input to OpenAI's API to generate a perturbed output. Each token of the input prompt is perturbed separately, to obtain an attribution score for each input token.
@@ -294,7 +294,7 @@ The `compute_attributions` method:
 
 The `hierarchical_perturbation` method is designed to reduce the number of API calls by perturbation larger chunks of the input prompt initially, and narrowing its search only on the chunks which have a large impact on the output (high attribution score).
 
-The flow is similar to that of `compute_attributions`, but using an iterative technique that works as follows:
+The flow is similar to that of `iterative_perturbation`, but using an iterative technique that works as follows:
 
 1. The prompt is split into chunks defined by `init_chunk_size` and `stride` (optional).
 2. The chunks are perturbed, sent to the API, and scores are calculated/logged as described above.

@@ -6,7 +6,7 @@ import torch
 
 class BaseLLMAttributor(ABC):
     @abstractmethod
-    def compute_attributions(
+    def iterative_perturbation(
         self, input_text: str, *args, **kwargs
     ) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
         pass
@@ -14,7 +14,7 @@ class BaseLLMAttributor(ABC):
 
 class BaseAsyncLLMAttributor(ABC):
     @abstractmethod
-    async def compute_attributions(
+    async def iterative_perturbation(
         self, input_text: str, *args, **kwargs
     ) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
         pass

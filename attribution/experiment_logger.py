@@ -112,7 +112,7 @@ class ExperimentLogger:
                     strategy,
                     token_id,
                     j,
-                    "_".join(output_token.split("_")[:-1]),
+                    " ".join(output_token.split(" ")[:-1]),
                     attr_score,
                     perturbation.perturbed_string,
                     output,
@@ -248,6 +248,7 @@ class ExperimentLogger:
         matrix = self.get_attribution_matrix(exp_id)
 
         input_tokens = [" ".join(x.split(" ")[:-1]) for x in matrix.index]
+
         token_dict = {f"token_{i+1}": t for i, t in enumerate(input_tokens)}
 
         for oi, output_token in enumerate(matrix.columns):
@@ -388,6 +389,9 @@ class ExperimentLogger:
                 token_data = self._aggregate_attr_score_df(token_data, score_agg)
 
             # Create the pivot table for the matrix
+
+            from IPython.display import display
+            display(exp_data)
             matrix = exp_data.pivot(
                 index="input_token_pos", columns="output_token_pos", values="attr_score"
             )

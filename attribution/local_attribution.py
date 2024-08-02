@@ -40,7 +40,7 @@ class LocalLLMAttributor(BaseLLMAttributor):
         self.embeddings = embeddings
         self.tokenizer = tokenizer
 
-    def compute_attributions(
+    def iterative_perturbation(
         self, input_string: str, generation_length: int = 5
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
