@@ -389,9 +389,6 @@ class ExperimentLogger:
                 token_data = self._aggregate_attr_score_df(token_data, score_agg)
 
             # Create the pivot table for the matrix
-
-            from IPython.display import display
-            display(exp_data)
             matrix = exp_data.pivot(
                 index="input_token_pos", columns="output_token_pos", values="attr_score"
             )
