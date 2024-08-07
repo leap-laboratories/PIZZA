@@ -22,6 +22,7 @@ and local LLMs:
       - [Linting](#linting)
     - [Installation](#installation)
     - [Initial Configuration](#initial-configuration)
+      - [Pre-commit hooks](#pre-commit-hooks)
       - [Environment Variables](#environment-variables)
   - [Quickstart](#quickstart)
     - [Attribution via OpenAI's API](#attribution-via-openais-api)
@@ -100,6 +101,20 @@ uv pip compile requirements-dev.in -o requirements-dev.txt
 ```
 
 ### Initial Configuration
+
+#### Pre-commit hooks
+
+This project performs linting and formatting checks in CI to ensure consistency of code style. Rather than waiting for CI to run, you can install pre-commit hooks to run these checks locally before you commit your changes.
+
+To install the pre-commit hooks, run the following command:
+
+```bash
+pre-commit install
+```
+
+This will install the pre-commit hooks defined in the `.pre-commit-config.yaml` file. Now, when you commit changes, the pre-commit hooks will run automatically.
+
+You may find that the pre-commit 'fails', even though the changes have been applied automaically by the hook (e.g. formatting changes). This is because the hook only makes the changes to the code, but does not add them to the commit stage. To finish your commit, add the changes to your commit stage, and then commit again.
 
 #### Environment Variables
 
