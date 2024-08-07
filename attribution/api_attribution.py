@@ -138,7 +138,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
             threshold_attribution_strategy (Optional[str]): The attribution strategy to use for threshold calculation. Only relevant when multiple attribution_strategies are passed. Defaults to None (selects the first strategy if multiple provided).
             ignore_output_token_location (bool): Flag indicating whether to ignore the output token location. Defaults to True.
             logger (Optional[ExperimentLogger]): The experiment logger. Defaults to None.
-            verbosity (int): Flag indicates how much information to print. Defaults to 0. Max = 2. 
+            verbosity (int): Flag indicates how much information to print. Defaults to 0. Max = 2.
         """
         threshold_attribution_strategy = threshold_attribution_strategy or attribution_strategies[0]
         if threshold_attribution_strategy not in attribution_strategies:
@@ -153,7 +153,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         if init_chunk_size is None:
             init_chunk_size = max(2, len(llm_input.unit_tokens) // CHUNK_DIVISIOR)
         if stride is None:
-            stride = max(1, init_chunk_size//2)
+            stride = max(1, init_chunk_size // 2)
 
         original_output = await self.get_chat_completion(llm_input.input_string)
         if logger:

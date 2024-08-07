@@ -15,6 +15,7 @@ DIV_STYLE_STR = '<div style="font-family: monospace; line-height: 1.5;">'
 SPAN_STYLE_COLOR_STR = '<span style="text-decoration: underline; text-decoration-color: #color#; text-decoration-thickness: 4px; text-underline-offset: 3px;">'
 SPAN_STYLE_STR = '<span style="text-decoration: underline; text-decoration-thickness: 4px; text-underline-offset: 3px;">'
 
+
 class ExperimentLogger:
     def __init__(self, experiment_id=0):
         self.experiment_id = experiment_id
@@ -182,7 +183,7 @@ class ExperimentLogger:
         return [token.replace("Ġ", " ") for token in tokens]
 
     def score_to_color(self, score, vmin=-1, vmax=1):
-        #Setting vmin and vmax to -1 and 1 centers the scores around 0.
+        # Setting vmin and vmax to -1 and 1 centers the scores around 0.
         norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
         cmap = plt.cm.seismic
         rgba_color = cmap(norm(score))
@@ -192,7 +193,6 @@ class ExperimentLogger:
     def print_text_total_attribution(
         self, exp_id: Optional[int] = None, score_agg: Literal["mean", "sum", "last"] = "mean"
     ):
-        
         if exp_id is not None and exp_id < 0:
             exp_id = self.df_experiments["exp_id"].max() + 1 + exp_id
 
@@ -226,10 +226,9 @@ class ExperimentLogger:
                 token = df[col]["token"]
                 score = df[col]["attr_score"]
                 color = self.score_to_color(score)
-                html_str += SPAN_STYLE_COLOR_STR.replace('#color#', color) + token + '</span>'
+                html_str += SPAN_STYLE_COLOR_STR.replace("#color#", color) + token + "</span>"
 
-            
-            html_str += ' -> ' + output
+            html_str += " -> " + output
             html_str += "</div>"
 
             # Display
@@ -253,7 +252,9 @@ class ExperimentLogger:
             token_dict = {f"token_{i+1}": t for i, t in enumerate(input_tokens)}
 
             for oi, output_token in enumerate(matrix.columns):
-                prev_output_str = "".join([" ".join(ot.split(" ")[:-1]) for ot in matrix.columns[:oi]])
+                prev_output_str = "".join(
+                    [" ".join(ot.split(" ")[:-1]) for ot in matrix.columns[:oi]]
+                )
                 following_output_str = "".join(
                     [" ".join(ot.split(" ")[:-1]) for ot in matrix.columns[oi + 1 :]]
                 )
@@ -269,10 +270,17 @@ class ExperimentLogger:
                     token = df[col]["token"]
                     score = df[col]["attr_score"]
                     color = self.score_to_color(score)
-                    html_str += SPAN_STYLE_COLOR_STR.replace('#color#', color) + token + '</span>'
+                    html_str += SPAN_STYLE_COLOR_STR.replace("#color#", color) + token + "</span>"
 
                 clean_output_token = " ".join(output_token.split(" ")[:-1])
-                html_str += ' -> ' + prev_output_str + SPAN_STYLE_STR + clean_output_token + '</span>' + following_output_str
+                html_str += (
+                    " -> "
+                    + prev_output_str
+                    + SPAN_STYLE_STR
+                    + clean_output_token
+                    + "</span>"
+                    + following_output_str
+                )
                 html_str += "</div>"
 
                 # Display
@@ -349,13 +357,13 @@ class ExperimentLogger:
                 from IPython.display import display
 
                 display(
-                    matrix.style.background_gradient(cmap="seismic", vmin=-1, vmax=1).set_properties(
-                        **{"white-space": "pre-wrap"}
-                    )
+                    matrix.style.background_gradient(
+                        cmap="seismic", vmin=-1, vmax=1
+                    ).set_properties(**{"white-space": "pre-wrap"})
                 )
             else:
                 self.pretty_print(matrix)
-    
+
     def get_attribution_matrices(
         self,
         exp_id: int = -1,
@@ -393,7 +401,7 @@ class ExperimentLogger:
                 token_data = self._aggregate_attr_score_df(token_data, score_agg)
 
             # Create the pivot table for the matrix
-            
+
             matrix = exp_data.pivot(
                 index="input_token_pos", columns="output_token_pos", values="attr_score"
             )

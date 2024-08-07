@@ -68,7 +68,10 @@ def cosine_similarity_attribution(
 
     cosine_distance = 1 - cosine_similarity(original_output_emb, perturbed_output_emb)
     token_distance = cosine_distance.min(axis=-1)
-    return {token + f" {i}": distance for i, (token, distance) in enumerate(zip(initial_tokens, token_distance))}
+    return {
+        token + f" {i}": distance
+        for i, (token, distance) in enumerate(zip(initial_tokens, token_distance))
+    }
 
 
 def _is_token_in_top_20(
