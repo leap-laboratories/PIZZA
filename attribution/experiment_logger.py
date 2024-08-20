@@ -394,9 +394,6 @@ class ExperimentLogger:
                 & (self.df_input_token_attribution["attribution_strategy"] == attribution_strategy)
             ]
 
-            is_hierarchical = exp_data["depth"].any()
-
-            #if is_hierarchical:
             exp_data = self._aggregate_attr_score_df(exp_data, score_agg)
             token_data = self._aggregate_attr_score_df(token_data, score_agg)
 
