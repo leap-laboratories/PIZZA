@@ -320,3 +320,6 @@ ix_str,prompt,original_prompt,algorithm,attr_method,perturb_method,target_sal_pe
   2.38418579e-07 2.38418579e-07 2.38418579e-07 2.38418579e-07
   2.38418579e-07 2.38418579e-07 2.38418579e-07 2.38418579e-07
   2.38418579e-07 2.38418579e-07]]","[0.6801462173461914, 2.384185791015625e-07]"
+"['hierarchical', 'prob_diff', 'fixed', 0.5, ""Maria is 37 years old today. How many years till she's 50? Answer briefly."", ""Maria is 37 years old today. How many years till she's 50?"", 14, 0.14285714285714285]",Maria is 37 years old today. How many years till she's 50? Answer briefly.,Maria is 37 years old today. How many years till she's 50?,hierarchical,prob_diff,fixed,0.5,14,0.14285714285714285,20,12.584065914154053,0.14598412698425905,0.20008453790460584,True,"['37', '50']",13,"[[0.19642821 0.19642821 0.19642821 0.1785711  0.14285688 0.14285688
+  0.10715949 0.09526036 0.09526036 0.12271759 0.11868973 0.20374087
+  0.15849212 0.08888779]]","[0.1964282055877889, 0.20374087022142276]"
