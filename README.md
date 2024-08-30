@@ -335,13 +335,11 @@ Note if more than one `attribution_strategies` are passed, only the first will b
 
 `PerturbationStrategy` is an abstract base class that defines the interface for all perturbation strategies. It declares the `get_replacement_token` method, which must be implemented by any concrete perturbation strategy class. This method takes a token id and returns a replacement token id.
 
-The `attribution_strategy` parameter is a string that specifies the method to use for computing attributions. The available strategies are "cosine" and "prob_diff".
+The `attribution_strategy` parameter is a string that specifies the method to use for computing attributions. The available strategies are "cosine" and "prob_diff":
 
 - **Cosine Similarity Attribution**: Measures the cosine similarity between the embeddings of the original and perturbed outputs. The embeddings are obtained from a pre-trained model (e.g. GPT2). The cosine similarity is calculated for each pair of tokens in the same position on the original and perturbed outputs. For example, it compares the token in position 0 in the original response to the token in position 0 in the perturbed response. Additionally, the cosine similarity of all of the embeddings together is computed. The difference in total similarity and token similarities are returned.
 
 - **Probability Difference Attribution**: Calculates the absolute difference in probabilities for each token in the original and perturbed outputs. The probabilities are obtained from the `top_logprobs` field of the tokens, which contains the most likely tokens for each token position. The mean of these differences is returned, as well as the probability difference for each token position.
-
-- **Token Displacement Attribution**: Calculates the displacement of each token in the original output within the perturbed output's `top_logprobs` predicted tokens. The `top_logprobs` field contains the most likely tokens for each token position. If a token from the original output is not found in the `top_logprobs` of the perturbed output, a maximum displacement value is assigned. The mean of these displacements is returned, as well as the displacement of each original output token.
 
 ### ExperimentLogger
 
