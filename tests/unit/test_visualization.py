@@ -36,9 +36,7 @@ def test_print_attribution_table(capsys):
     token_ids = torch.tensor([1, 2, 3, 4, 5, 6, 7, 8, 9])
     generation_length = 5
 
-    printer.print_attribution_table(
-        token_list, attr_scores, token_ids, generation_length
-    )
+    printer.print_attribution_table(token_list, attr_scores, token_ids, generation_length)
 
     captured = capsys.readouterr()
     assert "the quick brown fox jumps over the lazy dog" in captured.out

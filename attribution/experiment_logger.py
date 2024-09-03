@@ -240,11 +240,13 @@ class ExperimentLogger:
             else:
                 self.pretty_print(df)
 
-    def print_text_attribution_matrix(self, exp_id: int = -1):
+    def print_text_attribution_matrix(
+        self, exp_id: int = -1, score_agg: Literal["mean", "sum", "last"] = "mean"
+    ):
         if exp_id is not None and exp_id < 0:
             exp_id = self.df_experiments["exp_id"].max() + 1 + exp_id
 
-        matrices = self.get_attribution_matrices(exp_id)
+        matrices = self.get_attribution_matrices(exp_id, score_agg=score_agg)
 
         for matrix in matrices:
             input_tokens = [" ".join(x.split(" ")[:-1]) for x in matrix.index]
@@ -343,7 +345,7 @@ class ExperimentLogger:
         exp_id: int = -1,
         attribution_strategy: Optional[str] = None,
         show_debug_cols: bool = False,
-        score_agg: Literal["mean", "last"] = "mean",
+        score_agg: Literal["mean", "sum", "last"] = "mean",
     ):
         if exp_id is not None and exp_id < 0:
             exp_id = self.df_experiments["exp_id"].max() + 1 + exp_id
@@ -394,11 +396,8 @@ class ExperimentLogger:
                 & (self.df_input_token_attribution["attribution_strategy"] == attribution_strategy)
             ]
 
-            is_hierarchical = exp_data["depth"].any()
-
-            if is_hierarchical:
-                exp_data = self._aggregate_attr_score_df(exp_data, score_agg)
-                token_data = self._aggregate_attr_score_df(token_data, score_agg)
+            exp_data = self._aggregate_attr_score_df(exp_data, score_agg)
+            token_data = self._aggregate_attr_score_df(token_data, score_agg)
 
             # Create the pivot table for the matrix
 
