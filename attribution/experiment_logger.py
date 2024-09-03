@@ -240,7 +240,9 @@ class ExperimentLogger:
             else:
                 self.pretty_print(df)
 
-    def print_text_attribution_matrix(self, exp_id: int = -1, score_agg: Literal["mean", "sum", "last"] = "mean"):
+    def print_text_attribution_matrix(
+        self, exp_id: int = -1, score_agg: Literal["mean", "sum", "last"] = "mean"
+    ):
         if exp_id is not None and exp_id < 0:
             exp_id = self.df_experiments["exp_id"].max() + 1 + exp_id
 
