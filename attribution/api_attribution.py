@@ -123,6 +123,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         ignore_output_token_location: bool = True,
         logger: Optional[ExperimentLogger] = None,
         verbosity: int = 0,
+        max_depth: Optional[int] = None,
     ) -> None:
         """
         Hierarchical pertubation method. Uses a sliding window to split the input into chunks and continues to subdivided each chunk until the attribution falls below the dynamic threshold.
@@ -174,7 +175,7 @@ class OpenAIAttributor(BaseAsyncLLMAttributor):
         stage = 0
 
         # Main loop for hierarchical perturbation, run until masks cannot be further subdivided
-        while masks:
+        while masks and (max_depth is None or stage <= max_depth):
             if verbosity > 0:
                 print(f"Stage {stage}: making {len(masks)} perturbations")
             # Define perturbations for each mask
