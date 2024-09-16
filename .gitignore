@@ -15,3 +15,6 @@ __pycache__
 .env
 
 .DS_STORE
+
+# results
+*/*.csv
