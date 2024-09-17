@@ -15,3 +15,6 @@ __pycache__
 .env
 
 .DS_STORE
+
+examples/data/train_hc_dataset_small_20240915_044230.csv
+examples/data/val_hc_dataset_small_20240915_044230.csv
