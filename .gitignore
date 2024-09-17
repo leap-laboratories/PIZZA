@@ -18,5 +18,5 @@ __pycache__
 
 examples/data/train_hc_dataset_small_20240915_044230.csv
 examples/data/val_hc_dataset_small_20240915_044230.csv
-examples/train_hc_dataset_20240915_044230.csv
-examples/val_hc_dataset_20240915_044230.csv
+examples/data/train_hc_dataset_20240915_044230.csv
+examples/data/val_hc_dataset_20240915_044230.csv
